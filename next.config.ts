@@ -1,9 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // 启用服务启动钩子（instrumentation.ts）
   experimental: {
-    instrumentationHook: true,
     serverActions: {
       bodySizeLimit: "500mb",
     },
