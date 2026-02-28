@@ -42,3 +42,6 @@ next-env.d.ts
 
 # 运行时数据（测试会话、上传的 HAP 文件）
 data/
+
+# 本地脚本工具
+script/
