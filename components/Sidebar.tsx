@@ -71,7 +71,7 @@ export function Sidebar() {
           </svg>
         </div>
         <div>
-          <p style={{ fontSize: 14, fontWeight: 700, color: "white", lineHeight: 1.2, margin: 0 }}>qtoh-test</p>
+          <p style={{ fontSize: 14, fontWeight: 700, color: "white", lineHeight: 1.2, margin: 0 }}>qt4oh-studio</p>
           <p style={{ fontSize: 11, color: "rgba(165,180,252,0.7)", margin: "2px 0 0" }}>Qt for OpenHarmony 测试平台</p>
         </div>
       </div>

@@ -1,4 +1,4 @@
-# qtoh-test
+# qt4oh-studio
 
 **Qt for OpenHarmony 单元测试自动化执行与报告分析平台**
 
