@@ -1,0 +1,51 @@
+entry-default-signed.hap是HarmonyOS应用程序包
+// File: entry-default-signed.hap
+用hdc命令行工具签署应用程序包
+hdc -t XXXX shell aa force-stop com.qtsig.qtest
+hdc -t XXXX uninstall com.qtsig.qtest
+hdc -t XXXX shell mkdir data/local/tmp/5460af67fd6849bc840be0cc4a681b47
+hdc -t XXXX file send entry-default-signed.hap "data/local/tmp/5460af67fd6849bc840be0cc4a681b47"
+hdc -t XXXX shell bm install -p data/local/tmp/5460af67fd6849bc840be0cc4a681b47
+hdc -t XXXX shell rm -rf data/local/tmp/5460af67fd6849bc840be0cc4a681b47
+这是安装流程, 5460af67fd6849bc840be0cc4a681b47可以是uuid生成的随机字符串, XXXX是设备序列号
+hdc list targets 获取设备序列号,可能有多个设备连接
+
+entry-default-signed.hap是HarmonyOS应用程序包，其实是个压缩包，里面包含了应用程序的.so文件和资源文件,libs目录下有arm64-v8a\armeabi-v7a\x86_64等多个架构的.so文件,
+arm64-v8a\armeabi-v7a\x86_64等目录下的会有一个tests文件夹，里面包含了qt的单元测试库，我现在需要递归遍历出这些.so文件，进行动态加载，遍历得到tests/qtbase/char/libtst_qatomicinteger_char.so这样的文件路径，
+然后hdc shell aa start -a EntryAbility -b com.qtsig.qtest --ps runTestLib tests/qtbase/char/libtst_qatomicinteger_char.so动态加载这些测试库进行测试
+请帮我写一个python脚本来实现这个功能
+
+
+我还希望记录应用崩溃和测试超时的日志，日志文件命名为test_run_年月日_时分秒.log、test_timeout_年月日_时分秒.log和test_crash_年月日_时分秒.log，日志内容包括测试库路径、测试结果（成功/失败/超时）以及崩溃信息（如果有的话）。请帮我完善这个功能。
+
+dc shell hidumper -s 1201 -a "-p Faultlogger" 可以获取崩溃日志列表获取到的输出格式如下：
+
+-------------------------------[ability]-------------------------------
+
+
+----------------------------------HiviewService----------------------------------
+Fault log list:
+******
+cppcrash-com.qtsig.qtest-20020154-20260206145437
+cppcrash-com.qtsig.qtest-20020154-20260206144908
+cppcrash-com.qtsig.qtest-20020154-20260206143409
+cppcrash-com.qtsig.qtest-20020154-20260206143329
+cppcrash-com.qtsig.qtest-20020154-20260206141727
+cppcrash-com.qtsig.qtest-20020154-20260206141330
+cppcrash-com.qtsig.qtest-20020154-20260206141158
+cppcrash-com.qtsig.qtest-20020154-20260206140938
+cppcrash-com.qtsig.qtest-20020154-20260206140818
+cppcrash-com.qtsig.qtest-20020154-20260206140033
+syswarning-com.ohos.sceneboard-20020025-20260114175628
+syswarning-com.ohos.sceneboard-20020025-20260114174750
+syswarning-com.ohos.sceneboard-20020025-20260112104818
+syswarning-com.ohos.sceneboard-0-20251215170524
+jscrash-com.example.myapplication-20020013-20251208152455
+jscrash-com.qtsig.myapplication-20020152-20251208141609
+jscrash-com.qtsig.planets-20020150-20251114151150
+******
+你只需要获取当前测试相关的崩溃日志，单个测试执行完成后获取一次崩溃日志列表，判断是否有当前测试的崩溃日志生成，如果有则记录到test_crash_年月日_时分秒.log日志文件中，日志内容包括测试库路径和崩溃信息。
+并且使用hdc file recv /data/log/faultlog/faultlogger/{filename} {path} 命令将崩溃日志文件下载到本地Faultlogger目录下，方便后续分析。
+请帮我完善这个功能。
+
+程序的核心功能逻辑都script在这个脚本文件夹的python脚本里，我现在想基于Next.js做一个Qt for OpenHarmony单元测试执行、报告分析平台，UI组件库使用www.heroui.com的HeroUI

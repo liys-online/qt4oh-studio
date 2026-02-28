@@ -1,11 +1,9 @@
-import { heroui } from "@heroui/theme";
+const { heroui } = require("@heroui/theme");
 
-const config = {
+module.exports = {
   plugins: {
     "@tailwindcss/postcss": {
       plugins: [heroui()],
     },
   },
 };
-
-export default config;
