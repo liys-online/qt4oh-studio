@@ -45,3 +45,7 @@ data/
 
 # 本地脚本工具
 script/
+
+# Electron 构建产物
+electron-dist/
+release/

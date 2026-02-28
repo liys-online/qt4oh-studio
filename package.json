@@ -2,11 +2,15 @@
   "name": "qt4oh-studio",
   "version": "0.1.0",
   "private": true,
+  "main": "electron-dist/main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "electron:dev": "concurrently \"next dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron:build": "next build && tsc --project tsconfig.electron.json && electron-builder",
+    "electron:compile": "tsc --project tsconfig.electron.json"
   },
   "dependencies": {
     "@heroui/react": "^2.8.9",
@@ -26,9 +30,14 @@
     "@types/react-dom": "^19",
     "@types/unzipper": "^0.10.11",
     "@types/uuid": "^10.0.0",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^40.6.1",
+    "electron-builder": "^26.8.1",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wait-on": "^9.0.4"
   }
 }

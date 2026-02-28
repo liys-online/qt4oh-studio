@@ -1,0 +1,54 @@
+appId: com.qt4oh.studio
+productName: qt4oh-studio
+copyright: Copyright © 2026
+
+# 打包时包含的文件
+files:
+  - electron-dist/**/*
+  - .next/build/**/*
+  - .next/cache/**/*
+  - .next/server/**/*
+  - .next/static/**/*
+  - .next/types/**/*
+  - .next/*.json
+  - .next/*.js
+  - .next/BUILD_ID
+  - public/**/*
+  - package.json
+  - next.config.ts
+
+# 运行时数据目录不打包
+directories:
+  output: release
+
+# Windows 配置
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  signtoolOptions:
+    sign: null
+
+# 安装包配置
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerLanguages:
+    - zh_CN
+  language: 2052
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: qt4oh-studio
+
+# asar 打包（加速启动）
+asar: true
+asarUnpack:
+  - node_modules/**/*
+  - .next/**/*
+  - public/**/*
+
+# 额外资源：将 node.exe 打包到 resources/ 目录
+extraResources:
+  - from: build/node.exe
+    to: node.exe
