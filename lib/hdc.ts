@@ -11,6 +11,34 @@ import { v4 as uuidv4 } from "uuid";
 
 const execAsync = promisify(exec);
 
+const HDC_ENV_PATH = process.env.HDC_PATH;
+
+function resolveBundledHdcPath(): string | null {
+  const candidates = [
+    HDC_ENV_PATH,
+    path.join(process.cwd(), "public", "hdc.exe"),
+    path.join(process.cwd(), "hdc.exe"),
+    process.resourcesPath ? path.join(process.resourcesPath, "hdc.exe") : null,
+  ].filter(Boolean) as string[];
+
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) return p;
+    } catch {
+      // ignore lookup errors
+    }
+  }
+  return null;
+}
+
+const HDC_BIN = resolveBundledHdcPath() || "hdc";
+
+function buildHdcCommand(args: string): string {
+  // Quote path if it contains spaces
+  const bin = HDC_BIN.includes(" ") ? `"${HDC_BIN}"` : HDC_BIN;
+  return `${bin} ${args}`.trim();
+}
+
 export interface HdcDevice {
   id: string;
   status: string;
@@ -41,7 +69,7 @@ export async function runCommand(
 
 /** 获取 HDC 工具版本，返回版本字符串；失败返回 null */
 export async function getHdcVersion(): Promise<string | null> {
-  const output = await runCommand("hdc -v", true);
+  const output = await runCommand(buildHdcCommand("-v"), true);
   if (!output) return null;
   // 输出示例: "Ver: 3.1.0a" 或 "HDC 3.0.0b3"
   const match = output.match(/[\d]+\.[\d]+\.[\d]+[\w]*/i);
@@ -60,7 +88,7 @@ export interface DeviceInfo {
 /** 并行获取指定设备的详细硬件/系统参数 */
 export async function getDeviceInfo(deviceId: string): Promise<DeviceInfo> {
   const get = (param: string) =>
-    runCommand(`hdc -t ${deviceId} shell param get ${param}`, true);
+    runCommand(buildHdcCommand(`-t ${deviceId} shell param get ${param}`), true);
   const [name, brand, model, softwareVersion, apiVersion, cpuAbiList] =
     await Promise.all([
       get("const.product.name"),
@@ -75,7 +103,7 @@ export async function getDeviceInfo(deviceId: string): Promise<DeviceInfo> {
 
 /** 获取连接设备列表 */
 export async function getDeviceList(): Promise<HdcDevice[]> {
-  const output = await runCommand("hdc list targets", true);
+  const output = await runCommand(buildHdcCommand("list targets"), true);
   if (!output) return [];
   return output
     .split("\n")
@@ -93,32 +121,32 @@ export async function installHap(
 ): Promise<{ success: boolean; message: string }> {
   const tempDir = uuidv4().replace(/-/g, "");
 
-  await runCommand(`hdc -t ${deviceId} shell aa force-stop ${packageName}`, true, onCommand);
-  await runCommand(`hdc -t ${deviceId} uninstall ${packageName}`, true, onCommand);
+  await runCommand(buildHdcCommand(`-t ${deviceId} shell aa force-stop ${packageName}`), true, onCommand);
+  await runCommand(buildHdcCommand(`-t ${deviceId} uninstall ${packageName}`), true, onCommand);
 
   const mkResult = await runCommand(
-    `hdc -t ${deviceId} shell mkdir data/local/tmp/${tempDir}`,
+    buildHdcCommand(`-t ${deviceId} shell mkdir data/local/tmp/${tempDir}`),
     false,
     onCommand
   );
   if (mkResult === null) return { success: false, message: "创建临时目录失败" };
 
   const sendResult = await runCommand(
-    `hdc -t ${deviceId} file send "${hapFilePath}" "data/local/tmp/${tempDir}"`,
+    buildHdcCommand(`-t ${deviceId} file send "${hapFilePath}" "data/local/tmp/${tempDir}"`),
     false,
     onCommand
   );
   if (sendResult === null) return { success: false, message: "上传 HAP 失败" };
 
   const installResult = await runCommand(
-    `hdc -t ${deviceId} shell bm install -p data/local/tmp/${tempDir}`,
+    buildHdcCommand(`-t ${deviceId} shell bm install -p data/local/tmp/${tempDir}`),
     false,
     onCommand
   );
   if (installResult === null) return { success: false, message: "安装失败" };
 
   await runCommand(
-    `hdc -t ${deviceId} shell rm -rf data/local/tmp/${tempDir}`,
+    buildHdcCommand(`-t ${deviceId} shell rm -rf data/local/tmp/${tempDir}`),
     true,
     onCommand
   );
@@ -134,7 +162,7 @@ export async function startAbility(
   libPath: string,
   onCommand?: (cmd: string) => void
 ): Promise<string | null> {
-  const cmd = `hdc -t ${deviceId} shell aa start -a ${abilityName} -b ${packageName} --ps runTestLib ${libPath}`;
+  const cmd = buildHdcCommand(`-t ${deviceId} shell aa start -a ${abilityName} -b ${packageName} --ps runTestLib ${libPath}`);
   return runCommand(cmd, true, onCommand);
 }
 
@@ -146,20 +174,20 @@ export async function checkProcessRunning(
   const escaped = packageName.replace(/\./g, "\\.");
   const first = escaped[0];
   const rest = escaped.slice(1);
-  const cmd = `hdc -t ${deviceId} shell "ps -ef | grep [${first}]${rest}"`;
+  const cmd = buildHdcCommand(`-t ${deviceId} shell "ps -ef | grep [${first}]${rest}"`);
   const output = await runCommand(cmd, true);
   return !!output && output.trim().length > 0;
 }
 
 /** 强制终止应用进程 */
 export async function killProcess(deviceId: string, packageName: string): Promise<void> {
-  await runCommand(`hdc -t ${deviceId} shell aa force-stop ${packageName}`, true);
+  await runCommand(buildHdcCommand(`-t ${deviceId} shell aa force-stop ${packageName}`), true);
 }
 
 /** 获取崩溃日志列表原始输出 */
 export async function getFaultLogs(deviceId: string): Promise<string> {
   const output = await runCommand(
-    `hdc -t ${deviceId} shell hidumper -s 1201 -a "-p Faultlogger"`,
+    buildHdcCommand(`-t ${deviceId} shell hidumper -s 1201 -a "-p Faultlogger"`),
     true
   );
   return output || "";
@@ -205,7 +233,7 @@ export async function downloadTestReport(
   const localDirPath = path.dirname(localPath);
   if (!fs.existsSync(localDirPath)) fs.mkdirSync(localDirPath, { recursive: true });
   const result = await runCommand(
-    `hdc -t ${deviceId} file recv "${remotePath}" "${localPath}"`,
+    buildHdcCommand(`-t ${deviceId} file recv "${remotePath}" "${localPath}"`),
     true,
     onCommand
   );
@@ -221,7 +249,7 @@ export async function downloadFaultLog(
   const remotePath = `/data/log/faultlog/faultlogger/${filename}`;
   const localPath = path.join(localDir, filename);
   const result = await runCommand(
-    `hdc -t ${deviceId} file recv ${remotePath} ${localPath}`,
+    buildHdcCommand(`-t ${deviceId} file recv ${remotePath} ${localPath}`),
     true
   );
   return result !== null;
