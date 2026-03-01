@@ -11,7 +11,7 @@ interface HapInfo {
   totalLibs: number;
   modules: string[];
   archs: string[];
-  testLibs?: { module: string }[];
+  testLibs?: { module: string; arch?: string }[];
 }
 
 interface SessionSummary {
@@ -222,6 +222,11 @@ export default function TestsPage() {
     return acc;
   }, {});
 
+  const archCounts = (hapInfo?.testLibs ?? []).reduce<Record<string, number>>((acc, lib) => {
+    if (lib.arch) acc[lib.arch] = (acc[lib.arch] || 0) + 1;
+    return acc;
+  }, {});
+
   const sortedModules = hapInfo?.modules
     ? [...hapInfo.modules].sort((a, b) => (moduleCounts[b] || 0) - (moduleCounts[a] || 0))
     : [];
@@ -329,436 +334,490 @@ export default function TestsPage() {
   }
 
   return (
-    <div className="space-y-7 max-w-6xl mx-auto">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-800">测试执行</h1>
-        <p className="text-sm text-gray-500 mt-1">按步骤配置并启动 Qt 单元测试</p>
-      </div>
-
-      {/* 运行中的会话 */}
-      {runningSessions.length > 0 && (
-        <div className="rounded-2xl p-4 shadow-sm" style={{ background: "linear-gradient(135deg,rgba(65,205,82,0.08),rgba(33,168,52,0.05))", border: "1.5px solid rgba(65,205,82,0.25)", backdropFilter: "blur(12px)" }}>
-          <div className="flex items-center gap-2 mb-3">
-            <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "#41CD52" }} />
-            <h2 className="text-sm font-semibold" style={{ color: "#1a6628" }}>进行中的测试</h2>
-            <span className="text-xs px-1.5 py-0.5 rounded-full font-bold ml-auto" style={{ background: "rgba(65,205,82,0.15)", color: "#1d7a2e" }}>{runningSessions.length}</span>
-          </div>
-          <div className="space-y-2">
-            {runningSessions.map((s) => <SessionCard key={s.id} s={s} />)}
-          </div>
+    <div className="w-full px-2 lg:px-4 2xl:px-6">
+      <div className="space-y-7">
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">测试执行</h1>
+          <p className="text-sm text-gray-500 mt-1">按步骤配置并启动 Qt 单元测试</p>
         </div>
-      )}
 
-      {/* 历史记录 */}
-      {historySessions.length > 0 && (
-        <div className="rounded-2xl shadow-sm overflow-hidden" style={cardStyle}>
-          <div className="flex items-center gap-2 px-4 py-3 hover:bg-black/[0.02] transition-colors">
-            <div
-              className="flex items-center gap-2 flex-1 cursor-pointer"
-              onClick={() => setShowHistory(!showHistory)}
-            >
-              <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className="text-sm font-semibold text-gray-600">历史记录</span>
-              <span className="text-xs px-1.5 py-0.5 rounded-full ml-1" style={{ background: "rgba(0,0,0,0.06)", color: "#94a3b8" }}>{historySessions.length}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              {historySessions.length > 0 && (
-                <button
-                  onClick={handleDeleteAll}
-                  disabled={deletingAll}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all hover:bg-red-50 text-gray-400 hover:text-red-500 disabled:opacity-50"
-                  title="全部删除"
-                >
-                  {deletingAll ? (
-                    <Spinner size="sm" />
-                  ) : (
-                    <>
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                      全部删除
-                    </>
-                  )}
-                </button>
-              )}
-              <div
-                className="cursor-pointer"
-                onClick={() => setShowHistory(!showHistory)}
-              >
-                <svg className={`w-4 h-4 text-gray-400 transition-transform ${showHistory ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
+        {/* 步骤进度条 */}
+        <div className="flex items-center gap-2">
+          {[
+            { n: 1, label: "选择设备", done: step1Done, active: !step1Done },
+            { n: 2, label: "上传 HAP", done: step2Done, active: step1Done && !step2Done },
+            { n: 3, label: "配置参数", done: false, active: step3Active },
+          ].map((s, i) => (
+            <div key={s.n} className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
+                <StepBadge n={s.n} active={s.active} done={s.done} />
+                <span className={`text-xs font-medium ${s.done ? "text-emerald-600" : s.active ? "" : "text-gray-400"}`}
+                  style={s.active && !s.done ? { color: "#1d7a2e" } : {}}>
+                  {s.label}
+                </span>
               </div>
+              {i < 2 && <div className="w-8 h-px" style={{ background: "rgba(0,0,0,0.1)" }} />}
             </div>
-          </div>
-          {showHistory && (
-            <div className="px-4 pb-4 space-y-2">
-              {historySessions.slice(0, 10).map((s) => <SessionCard key={s.id} s={s} />)}
-              {historySessions.length > 10 && (
-                <p className="text-xs text-center text-gray-400 pt-1">仅显示最近 10 条</p>
-              )}
-            </div>
-          )}
+          ))}
         </div>
-      )}
 
-      {/* 步骤进度条 */}
-      <div className="flex items-center gap-2">
-        {[
-          { n: 1, label: "选择设备", done: step1Done, active: !step1Done },
-          { n: 2, label: "上传 HAP", done: step2Done, active: step1Done && !step2Done },
-          { n: 3, label: "配置参数", done: false, active: step3Active },
-        ].map((s, i) => (
-          <div key={s.n} className="flex items-center gap-2">
-            <div className="flex items-center gap-2">
-              <StepBadge n={s.n} active={s.active} done={s.done} />
-              <span className={`text-xs font-medium ${s.done ? "text-emerald-600" : s.active ? "" : "text-gray-400"}`}
-                style={s.active && !s.done ? { color: "#1d7a2e" } : {}}>
-                {s.label}
-              </span>
-            </div>
-            {i < 2 && <div className="w-8 h-px" style={{ background: "rgba(0,0,0,0.1)" }} />}
-          </div>
-        ))}
-      </div>
-
-      {/* Step 1: 选择设备 */}
-      <div className="rounded-2xl p-5 shadow-sm" style={cardStyle}>
-        <div className="flex items-center gap-3 mb-4">
-          <StepBadge n={1} active={!step1Done} done={step1Done} />
-          <h2 className="text-sm font-semibold text-gray-800">选择目标设备</h2>
-        </div>
-        {devicesLoading ? (
-          <div className="flex items-center gap-2 p-3">
-            <Spinner size="sm" />
-            <span className="text-xs text-gray-400">检测设备中...</span>
-          </div>
-        ) : devices.length === 0 ? (
-          <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)" }}>
-            <svg className="w-4 h-4 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            <p className="text-xs text-amber-700">未检测到设备，请前往设备管理页面检查连接</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {devices.map((d) => {
-              const isSelected = selectedDevice === d.id;
-              const info = deviceInfoMap[d.id];
-              const loadingInfo = info === undefined;
-              return (
-                <div key={d.id} className="flex flex-col">
-                  <button
-                    onClick={() => selectDevice(d.id)}
-                    className="flex items-center gap-3 p-3 rounded-xl text-left transition-all hover:scale-[1.01]"
-                    style={
-                      isSelected
-                        ? { background: "linear-gradient(135deg, rgba(65,205,82,0.1), rgba(33,168,52,0.08))", border: "2px solid rgba(65,205,82,0.4)", borderRadius: info !== undefined ? "12px 12px 0 0" : undefined }
-                        : { background: "rgba(0,0,0,0.03)", border: "2px solid transparent" }
-                    }
-                  >
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg, #10b981, #059669)" }}>
-                      <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
-                      </svg>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold text-gray-800 truncate">{d.id}</p>
-                      <p className="text-xs text-emerald-600">在线</p>
-                    </div>
-                    {isSelected && (
-                      <svg className="w-4 h-4 ml-auto shrink-0" style={{ color: "#41CD52" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </button>
-                  {isSelected && (
-                    <div className="px-3 py-2.5 rounded-b-xl" style={{ background: "rgba(65,205,82,0.03)", border: "2px solid rgba(65,205,82,0.4)", borderTop: "none" }}>
-                      {loadingInfo ? (
-                        <div className="flex items-center gap-2">
-                          <Spinner size="sm" />
-                          <span className="text-xs text-gray-400">获取设备信息...</span>
-                        </div>
-                      ) : info ? (
-                        <div className="flex flex-col gap-1">
-                          {([
-                            ["名称", info.name],
-                            ["品牌", info.brand],
-                            ["型号", info.model],
-                            ["API 版本", info.apiVersion],
-                            ["CPU 架构", info.cpuAbiList],
-                            ["系统版本", info.softwareVersion],
-                          ] as [string, string | null][]).map(([label, val]) => (
-                            <div key={label} className="flex items-start gap-2">
-                              <span className="text-xs text-gray-400 shrink-0 w-14">{label}</span>
-                              <span className="text-xs text-gray-700 font-medium break-all">{val || "—"}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  )}
+        {/* 设置区：左设备+上传，右配置 */}
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(520px,42%)] gap-6">
+          <div className="space-y-7">
+            {/* Step 1: 选择设备 */}
+            <div className="rounded-2xl p-5 shadow-sm" style={cardStyle}>
+              <div className="flex items-center gap-3 mb-4">
+                <StepBadge n={1} active={!step1Done} done={step1Done} />
+                <h2 className="text-sm font-semibold text-gray-800">选择目标设备</h2>
+              </div>
+              {devicesLoading ? (
+                <div className="flex items-center gap-2 p-3">
+                  <Spinner size="sm" />
+                  <span className="text-xs text-gray-400">检测设备中...</span>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Step 2: 上传 HAP */}
-      <div className="rounded-2xl p-5 shadow-sm" style={cardStyle}>
-        <div className="flex items-center gap-3 mb-4">
-          <StepBadge n={2} active={step1Done && !step2Done} done={step2Done} />
-          <h2 className="text-sm font-semibold text-gray-800">上传 HAP 包</h2>
-        </div>
-        <input ref={fileInputRef} type="file" accept=".hap" className="hidden" onChange={handleFileChange} />
-        <div
-          onClick={() => fileInputRef.current?.click()}
-          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={handleDrop}
-          className="rounded-xl p-8 text-center cursor-pointer transition-all"
-          style={
-            dragging
-              ? { border: "2px dashed #41CD52", background: "rgba(65,205,82,0.06)" }
-              : hapInfo
-              ? { border: "2px dashed rgba(16,185,129,0.4)", background: "rgba(16,185,129,0.04)" }
-              : { border: "2px dashed rgba(65,205,82,0.3)", background: "rgba(65,205,82,0.02)" }
-          }
-        >
-          {uploading ? (
-            <div className="flex flex-col items-center gap-3">
-              <Spinner size="md" />
-              <p className="text-sm text-gray-500">解析 HAP 中，请稍候...</p>
+              ) : devices.length === 0 ? (
+                <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)" }}>
+                  <svg className="w-4 h-4 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <p className="text-xs text-amber-700">未检测到设备，请前往设备管理页面检查连接</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {devices.map((d) => {
+                    const isSelected = selectedDevice === d.id;
+                    const info = deviceInfoMap[d.id];
+                    const loadingInfo = info === undefined;
+                    return (
+                      <div key={d.id} className="flex flex-col">
+                        <button
+                          onClick={() => selectDevice(d.id)}
+                          className="flex items-center gap-3 p-3 rounded-xl text-left transition-all hover:scale-[1.01]"
+                          style={
+                            isSelected
+                              ? { background: "linear-gradient(135deg, rgba(65,205,82,0.1), rgba(33,168,52,0.08))", border: "2px solid rgba(65,205,82,0.4)", borderRadius: info !== undefined ? "12px 12px 0 0" : undefined }
+                              : { background: "rgba(0,0,0,0.03)", border: "2px solid transparent" }
+                          }
+                        >
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg, #10b981, #059669)" }}>
+                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
+                            </svg>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold text-gray-800 truncate">{d.id}</p>
+                            <p className="text-xs text-emerald-600">在线</p>
+                          </div>
+                          {isSelected && (
+                            <svg className="w-4 h-4 ml-auto shrink-0" style={{ color: "#41CD52" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                        {isSelected && (
+                          <div className="px-3 py-2.5 rounded-b-xl" style={{ background: "rgba(65,205,82,0.03)", border: "2px solid rgba(65,205,82,0.4)", borderTop: "none" }}>
+                            {loadingInfo ? (
+                              <div className="flex items-center gap-2">
+                                <Spinner size="sm" />
+                                <span className="text-xs text-gray-400">获取设备信息...</span>
+                              </div>
+                            ) : info ? (
+                              <div className="flex flex-col gap-1">
+                                {([
+                                  ["名称", info.name],
+                                  ["品牌", info.brand],
+                                  ["型号", info.model],
+                                  ["API 版本", info.apiVersion],
+                                  ["CPU 架构", info.cpuAbiList],
+                                  ["系统版本", info.softwareVersion],
+                                ] as [string, string | null][]).map(([label, val]) => (
+                                  <div key={label} className="flex items-start gap-2">
+                                    <span className="text-xs text-gray-400 shrink-0 w-14">{label}</span>
+                                    <span className="text-xs text-gray-700 font-medium break-all">{val || "—"}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          ) : hapInfo ? (
-            <div className="flex flex-col items-center gap-2">
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, #10b981, #059669)" }}>
-                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+
+            {/* Step 2: 上传 HAP */}
+            <div className="rounded-2xl p-5 shadow-sm" style={cardStyle}>
+              <div className="flex items-center gap-3 mb-4">
+                <StepBadge n={2} active={step1Done && !step2Done} done={step2Done} />
+                <h2 className="text-sm font-semibold text-gray-800">上传 HAP 包</h2>
               </div>
-              <p className="text-sm font-semibold text-gray-800">{hapInfo.fileName}</p>
-              <p className="text-xs text-gray-400">找到 <span style={{ color: "#1d7a2e" }} className="font-bold">{hapInfo.totalLibs}</span> 个测试库 · 点击重新上传</p>
-              <div className="flex flex-wrap gap-1.5 justify-center mt-1">
-                {hapInfo.archs.map((a) => (
-                  <span key={a} className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(65,205,82,0.12)", color: "#1d7a2e" }}>{a}</span>
-                ))}
-                {hapInfo.modules.slice(0, 4).map((m) => (
-                  <span key={m} className="text-xs px-2 py-0.5 rounded-full font-mono" style={{ background: "rgba(0,0,0,0.05)", color: "#64748b" }}>{m}</span>
-                ))}
-                {hapInfo.modules.length > 4 && (
-                  <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(0,0,0,0.05)", color: "#94a3b8" }}>+{hapInfo.modules.length - 4} 个模块</span>
+              <input ref={fileInputRef} type="file" accept=".hap" className="hidden" onChange={handleFileChange} />
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={handleDrop}
+                className="rounded-xl p-6 cursor-pointer transition-all"
+                style={
+                  dragging
+                    ? { border: "2px dashed #41CD52", background: "rgba(65,205,82,0.06)" }
+                    : hapInfo
+                    ? { border: "2px dashed rgba(16,185,129,0.4)", background: "rgba(16,185,129,0.04)" }
+                    : { border: "2px dashed rgba(65,205,82,0.3)", background: "rgba(65,205,82,0.02)" }
+                }
+              >
+                {uploading ? (
+                  <div className="flex flex-col sm:flex-row items-center gap-4">
+                    <Spinner size="md" />
+                    <p className="text-sm text-gray-500">解析 HAP 中，请稍候...</p>
+                  </div>
+                ) : hapInfo ? (
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg, #10b981, #059669)" }}>
+                      <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-800 truncate">{hapInfo.fileName}</p>
+                      <p className="text-xs text-gray-400">找到 <span style={{ color: "#1d7a2e" }} className="font-bold">{hapInfo.totalLibs}</span> 个测试库 · 点击重新上传</p>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 sm:ml-auto">
+                      {hapInfo.archs.map((a) => (
+                        <span key={a} className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(65,205,82,0.12)", color: "#1d7a2e" }}>{a}</span>
+                      ))}
+                      {hapInfo.modules.slice(0, 4).map((m) => (
+                        <span key={m} className="text-xs px-2 py-0.5 rounded-full font-mono" style={{ background: "rgba(0,0,0,0.05)", color: "#64748b" }}>{m}</span>
+                      ))}
+                      {hapInfo.modules.length > 4 && (
+                        <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(0,0,0,0.05)", color: "#94a3b8" }}>+{hapInfo.modules.length - 4} 个模块</span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg, rgba(65,205,82,0.12), rgba(33,168,52,0.1))" }}>
+                      <svg className="w-6 h-6" style={{ color: "#41CD52" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">拖放或 <span style={{ color: "#1d7a2e" }} className="font-semibold">点击上传</span> HAP 文件</p>
+                      <p className="text-xs text-gray-400 mt-1">支持 entry-default-signed.hap</p>
+                    </div>
+                  </div>
                 )}
               </div>
+              {uploadError && (
+                <p className="mt-2 text-xs text-red-500 flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  {uploadError}
+                </p>
+              )}
             </div>
-          ) : (
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(65,205,82,0.12), rgba(33,168,52,0.1))" }}>
-                <svg className="w-6 h-6" style={{ color: "#41CD52" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">拖放或 <span style={{ color: "#1d7a2e" }} className="font-semibold">点击上传</span> HAP 文件</p>
-                <p className="text-xs text-gray-400 mt-1">支持 entry-default-signed.hap</p>
-              </div>
-            </div>
-          )}
-        </div>
-        {uploadError && (
-          <p className="mt-2 text-xs text-red-500 flex items-center gap-1.5">
-            <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-            {uploadError}
-          </p>
-        )}
-      </div>
-
-      {/* Step 3: 配置参数 */}
-      {hapInfo && (
-        <div className="rounded-2xl p-5 shadow-sm" style={cardStyle}>
-          <div className="flex items-center gap-3 mb-5">
-            <StepBadge n={3} active={step3Active} done={false} />
-            <h2 className="text-sm font-semibold text-gray-800">测试配置</h2>
-            <span className="text-xs text-gray-400 ml-auto">均为可选项</span>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs font-medium text-gray-500 mb-1.5 block">包名</label>
-                <input
-                  type="text"
-                  placeholder="com.qtsig.qtest"
-                  value={packageName}
-                  onChange={(e) => setPackageName(e.target.value)}
-                  className="w-full text-sm rounded-xl px-3 py-2.5 outline-none transition-all"
-                  style={{ background: "rgba(0,0,0,0.04)", border: "1.5px solid rgba(0,0,0,0.1)" }}
-                />
-              </div>
 
-              <div>
-                <label className="text-xs font-medium text-gray-500 mb-1.5 block">Ability</label>
-                <input
-                  type="text"
-                  placeholder="EntryAbility"
-                  value={abilityName}
-                  onChange={(e) => setAbilityName(e.target.value)}
-                  className="w-full text-sm rounded-xl px-3 py-2.5 outline-none transition-all"
-                  style={{ background: "rgba(0,0,0,0.04)", border: "1.5px solid rgba(0,0,0,0.1)" }}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">架构过滤</label>
-                  <select
-                    value={filterArch}
-                    onChange={(e) => setFilterArch(e.target.value)}
-                    className="w-full text-sm rounded-xl px-3 py-2.5 outline-none transition-all"
-                    style={{ background: "rgba(0,0,0,0.04)", border: "1.5px solid rgba(0,0,0,0.1)" }}
-                  >
-                    <option value="">全部架构</option>
-                    {hapInfo.archs.map((a) => <option key={a} value={a}>{a}</option>)}
-                  </select>
+          <div className="space-y-4">
+            {/* Step 3: 配置参数 */}
+            {hapInfo && (
+              <div className="rounded-2xl p-5 shadow-sm" style={cardStyle}>
+                <div className="flex items-center gap-3 mb-5">
+                  <StepBadge n={3} active={step3Active} done={false} />
+                  <h2 className="text-sm font-semibold text-gray-800">测试配置</h2>
+                  <span className="text-xs text-gray-400 ml-auto">均为可选项</span>
                 </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">模块过滤（可多选）</label>
-                  <div className="rounded-xl p-2" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.06)" }}>
-                    <label
-                      className="w-full flex items-center justify-between text-xs px-3 py-2 rounded-lg font-medium transition-all"
-                      style={{
-                        cursor: "pointer",
-                        background: filterModule.length === 0 ? "rgba(65,205,82,0.15)" : "transparent",
-                        color: filterModule.length === 0 ? "#1d7a2e" : "#64748b",
-                      }}
-                    >
-                      <span className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={filterModule.length === 0}
-                          onChange={() => setFilterModule([])}
-                        />
-                        <span>全部模块</span>
-                      </span>
-                      <span className="text-[11px]" style={{ color: "#94a3b8" }}>{hapInfo.totalLibs}</span>
-                    </label>
-                    <div className="mt-1 max-h-44 overflow-y-auto space-y-1 pr-1">
-                      {sortedModules.map((m) => {
-                        const active = filterModule.includes(m);
-                        const count = moduleCounts[m] || 0;
-                        return (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 mb-1.5 block">包名</label>
+                      <input
+                        type="text"
+                        placeholder="com.qtsig.qtest"
+                        value={packageName}
+                        onChange={(e) => setPackageName(e.target.value)}
+                        className="w-full text-sm rounded-xl px-3 py-2.5 outline-none transition-all"
+                        style={{ background: "rgba(0,0,0,0.04)", border: "1.5px solid rgba(0,0,0,0.1)" }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 mb-1.5 block">Ability</label>
+                      <input
+                        type="text"
+                        placeholder="EntryAbility"
+                        value={abilityName}
+                        onChange={(e) => setAbilityName(e.target.value)}
+                        className="w-full text-sm rounded-xl px-3 py-2.5 outline-none transition-all"
+                        style={{ background: "rgba(0,0,0,0.04)", border: "1.5px solid rgba(0,0,0,0.1)" }}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-medium text-gray-500 mb-1.5 block">架构过滤</label>
+                        <div className="rounded-xl p-2" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.06)" }}>
                           <label
-                            key={m}
                             className="w-full flex items-center justify-between text-xs px-3 py-2 rounded-lg font-medium transition-all"
                             style={{
                               cursor: "pointer",
-                              background: active ? "rgba(65,205,82,0.15)" : "transparent",
-                              color: active ? "#1d7a2e" : "#64748b",
+                              background: filterArch === "" ? "rgba(65,205,82,0.15)" : "transparent",
+                              color: filterArch === "" ? "#1d7a2e" : "#64748b",
                             }}
                           >
-                            <span className="flex items-center gap-2 min-w-0">
+                            <span className="flex items-center gap-2">
                               <input
                                 type="checkbox"
-                                checked={active}
-                                onChange={() =>
-                                  setFilterModule((prev) =>
-                                    prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]
-                                  )
-                                }
+                                checked={filterArch === ""}
+                                onChange={() => setFilterArch("")}
                               />
-                              <span className="truncate">{m}</span>
+                              <span>全部架构</span>
                             </span>
-                            <span className="text-[11px]" style={{ color: active ? "#1d7a2e" : "#94a3b8" }}>{count}</span>
+                            <span className="text-[11px]" style={{ color: "#94a3b8" }}>{hapInfo.totalLibs}</span>
                           </label>
-                        );
-                      })}
+                          <div className="mt-1 space-y-1">
+                            {hapInfo.archs.map((a) => {
+                              const active = filterArch === a;
+                              const count = archCounts[a] || 0;
+                              return (
+                                <label
+                                  key={a}
+                                  className="w-full flex items-center justify-between text-xs px-3 py-2 rounded-lg font-medium transition-all"
+                                  style={{
+                                    cursor: "pointer",
+                                    background: active ? "rgba(65,205,82,0.15)" : "transparent",
+                                    color: active ? "#1d7a2e" : "#64748b",
+                                  }}
+                                >
+                                  <span className="flex items-center gap-2 min-w-0">
+                                    <input
+                                      type="checkbox"
+                                      checked={active}
+                                      onChange={() => setFilterArch(active ? "" : a)}
+                                    />
+                                    <span className="truncate">{a}</span>
+                                  </span>
+                                  <span className="text-[11px]" style={{ color: active ? "#1d7a2e" : "#94a3b8" }}>{count}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-500 mb-1.5 block">模块过滤（可多选）</label>
+                        <div className="rounded-xl p-2" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.06)" }}>
+                          <label
+                            className="w-full flex items-center justify-between text-xs px-3 py-2 rounded-lg font-medium transition-all"
+                            style={{
+                              cursor: "pointer",
+                              background: filterModule.length === 0 ? "rgba(65,205,82,0.15)" : "transparent",
+                              color: filterModule.length === 0 ? "#1d7a2e" : "#64748b",
+                            }}
+                          >
+                            <span className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={filterModule.length === 0}
+                                onChange={() => setFilterModule([])}
+                              />
+                              <span>全部模块</span>
+                            </span>
+                            <span className="text-[11px]" style={{ color: "#94a3b8" }}>{hapInfo.totalLibs}</span>
+                          </label>
+                          <div className="mt-1 max-h-44 overflow-y-auto space-y-1 pr-1">
+                            {sortedModules.map((m) => {
+                              const active = filterModule.includes(m);
+                              const count = moduleCounts[m] || 0;
+                              return (
+                                <label
+                                  key={m}
+                                  className="w-full flex items-center justify-between text-xs px-3 py-2 rounded-lg font-medium transition-all"
+                                  style={{
+                                    cursor: "pointer",
+                                    background: active ? "rgba(65,205,82,0.15)" : "transparent",
+                                    color: active ? "#1d7a2e" : "#64748b",
+                                  }}
+                                >
+                                  <span className="flex items-center gap-2 min-w-0">
+                                    <input
+                                      type="checkbox"
+                                      checked={active}
+                                      onChange={() =>
+                                        setFilterModule((prev) =>
+                                          prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]
+                                        )
+                                      }
+                                    />
+                                    <span className="truncate">{m}</span>
+                                  </span>
+                                  <span className="text-[11px]" style={{ color: active ? "#1d7a2e" : "#94a3b8" }}>{count}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 mb-1.5 block">名称过滤（可选）</label>
+                      <input
+                        type="text"
+                        placeholder="如: qatomic"
+                        value={filterPattern}
+                        onChange={(e) => setFilterPattern(e.target.value)}
+                        className="w-full text-sm rounded-xl px-3 py-2.5 outline-none transition-all"
+                        style={{ background: "rgba(0,0,0,0.04)", border: "1.5px solid rgba(0,0,0,0.1)" }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 mb-1.5 block">单个测试超时</label>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {TIMEOUT_OPTIONS.map((t) => (
+                          <button
+                            key={t}
+                            onClick={() => setTimeout_(t)}
+                            className="py-2 rounded-xl text-xs font-medium transition-all"
+                            style={
+                              timeout === t
+                                ? { background: "linear-gradient(135deg, #41CD52, #21a834)", color: "white" }
+                                : { background: "rgba(0,0,0,0.04)", color: "#64748b", border: "1.5px solid rgba(0,0,0,0.08)" }
+                            }
+                          >
+                            {t}s
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 rounded-xl" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.06)" }}>
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">跳过安装步骤</p>
+                        <p className="text-xs text-gray-400">HAP 已安装时可跳过以节省时间</p>
+                      </div>
+                      <button
+                        onClick={() => setSkipInstall(!skipInstall)}
+                        className="w-11 h-6 rounded-full transition-all relative"
+                        style={{ background: skipInstall ? "linear-gradient(135deg, #41CD52, #21a834)" : "rgba(0,0,0,0.15)" }}
+                      >
+                        <span
+                          className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all"
+                          style={{ left: skipInstall ? "calc(100% - 22px)" : "2px" }}
+                        />
+                      </button>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
 
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs font-medium text-gray-500 mb-1.5 block">名称过滤（可选）</label>
-                <input
-                  type="text"
-                  placeholder="如: qatomic"
-                  value={filterPattern}
-                  onChange={(e) => setFilterPattern(e.target.value)}
-                  className="w-full text-sm rounded-xl px-3 py-2.5 outline-none transition-all"
-                  style={{ background: "rgba(0,0,0,0.04)", border: "1.5px solid rgba(0,0,0,0.1)" }}
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-gray-500 mb-1.5 block">单个测试超时</label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {TIMEOUT_OPTIONS.map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => setTimeout_(t)}
-                      className="py-2 rounded-xl text-xs font-medium transition-all"
-                      style={
-                        timeout === t
-                          ? { background: "linear-gradient(135deg, #41CD52, #21a834)", color: "white" }
-                          : { background: "rgba(0,0,0,0.04)", color: "#64748b", border: "1.5px solid rgba(0,0,0,0.08)" }
-                      }
-                    >
-                      {t}s
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between p-3 rounded-xl" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.06)" }}>
-                <div>
-                  <p className="text-sm font-medium text-gray-700">跳过安装步骤</p>
-                  <p className="text-xs text-gray-400">HAP 已安装时可跳过以节省时间</p>
-                </div>
-                <button
-                  onClick={() => setSkipInstall(!skipInstall)}
-                  className="w-11 h-6 rounded-full transition-all relative"
-                  style={{ background: skipInstall ? "linear-gradient(135deg, #41CD52, #21a834)" : "rgba(0,0,0,0.15)" }}
-                >
-                  <span
-                    className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all"
-                    style={{ left: skipInstall ? "calc(100% - 22px)" : "2px" }}
-                  />
-                </button>
-              </div>
+            {/* 启动按钮 */}
+            <div className="mt-5">
+              <button
+                onClick={handleStart}
+                disabled={!hapInfo || !selectedDevice || starting}
+                className="w-full py-3.5 rounded-2xl text-sm font-bold text-white shadow-lg transition-all hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                style={{ background: "linear-gradient(135deg, #41CD52 0%, #21a834 100%)" }}
+              >
+                {starting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Spinner size="sm" color="white" />
+                    正在启动测试...
+                  </span>
+                ) : (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    开始执行测试
+                  </span>
+                )}
+              </button>
             </div>
           </div>
         </div>
-      )}
 
-      {/* 启动按钮 */}
-      <button
-        onClick={handleStart}
-        disabled={!hapInfo || !selectedDevice || starting}
-        className="w-full py-3.5 rounded-2xl text-sm font-bold text-white shadow-lg transition-all hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
-        style={{ background: "linear-gradient(135deg, #41CD52 0%, #21a834 100%)" }}
-      >
-        {starting ? (
-          <span className="flex items-center justify-center gap-2">
-            <Spinner size="sm" color="white" />
-            正在启动测试...
-          </span>
-        ) : (
-          <span className="flex items-center justify-center gap-2">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            开始执行测试
-          </span>
-        )}
-      </button>
+        {/* 会话区（全宽） */}
+        <div className="space-y-7">
+          {/* 运行中的会话 */}
+          {runningSessions.length > 0 && (
+            <div className="rounded-2xl p-4 shadow-sm" style={{ background: "linear-gradient(135deg,rgba(65,205,82,0.08),rgba(33,168,52,0.05))", border: "1.5px solid rgba(65,205,82,0.25)", backdropFilter: "blur(12px)" }}>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "#41CD52" }} />
+                <h2 className="text-sm font-semibold" style={{ color: "#1a6628" }}>进行中的测试</h2>
+                <span className="text-xs px-1.5 py-0.5 rounded-full font-bold ml-auto" style={{ background: "rgba(65,205,82,0.15)", color: "#1d7a2e" }}>{runningSessions.length}</span>
+              </div>
+              <div className="space-y-2">
+                {runningSessions.map((s) => <SessionCard key={s.id} s={s} />)}
+              </div>
+            </div>
+          )}
+
+          {/* 历史记录 */}
+          {historySessions.length > 0 && (
+            <div className="rounded-2xl shadow-sm overflow-hidden" style={cardStyle}>
+              <div className="flex items-center gap-2 px-4 py-3 hover:bg-black/[0.02] transition-colors">
+                <div
+                  className="flex items-center gap-2 flex-1 cursor-pointer"
+                  onClick={() => setShowHistory(!showHistory)}
+                >
+                  <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-sm font-semibold text-gray-600">历史记录</span>
+                  <span className="text-xs px-1.5 py-0.5 rounded-full ml-1" style={{ background: "rgba(0,0,0,0.06)", color: "#94a3b8" }}>{historySessions.length}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {historySessions.length > 0 && (
+                    <button
+                      onClick={handleDeleteAll}
+                      disabled={deletingAll}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all hover:bg-red-50 text-gray-400 hover:text-red-500 disabled:opacity-50"
+                      title="全部删除"
+                    >
+                      {deletingAll ? (
+                        <Spinner size="sm" />
+                      ) : (
+                        <>
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          全部删除
+                        </>
+                      )}
+                    </button>
+                  )}
+                  <div
+                    className="cursor-pointer"
+                    onClick={() => setShowHistory(!showHistory)}
+                  >
+                    <svg className={`w-4 h-4 text-gray-400 transition-transform ${showHistory ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+              {showHistory && (
+                <div className="px-4 pb-4 space-y-2">
+                  {historySessions.slice(0, 10).map((s) => <SessionCard key={s.id} s={s} />)}
+                  {historySessions.length > 10 && (
+                    <p className="text-xs text-center text-gray-400 pt-1">仅显示最近 10 条</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
