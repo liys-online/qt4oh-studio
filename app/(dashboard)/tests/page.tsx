@@ -629,42 +629,52 @@ export default function TestsPage() {
                 <div>
                   <label className="text-xs font-medium text-gray-500 mb-1.5 block">模块过滤（可多选）</label>
                   <div className="rounded-xl p-2" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.06)" }}>
-                    <button
-                      onClick={() => setFilterModule([])}
+                    <label
                       className="w-full flex items-center justify-between text-xs px-3 py-2 rounded-lg font-medium transition-all"
                       style={{
-                        border: "none",
                         cursor: "pointer",
                         background: filterModule.length === 0 ? "rgba(65,205,82,0.15)" : "transparent",
                         color: filterModule.length === 0 ? "#1d7a2e" : "#64748b",
                       }}
                     >
-                      <span>全部模块</span>
+                      <span className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={filterModule.length === 0}
+                          onChange={() => setFilterModule([])}
+                        />
+                        <span>全部模块</span>
+                      </span>
                       <span className="text-[11px]" style={{ color: "#94a3b8" }}>{hapInfo.totalLibs}</span>
-                    </button>
+                    </label>
                     <div className="mt-1 max-h-44 overflow-y-auto space-y-1 pr-1">
                       {sortedModules.map((m) => {
                         const active = filterModule.includes(m);
                         const count = moduleCounts[m] || 0;
                         return (
-                          <button
+                          <label
                             key={m}
-                            onClick={() =>
-                              setFilterModule((prev) =>
-                                prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]
-                              )
-                            }
                             className="w-full flex items-center justify-between text-xs px-3 py-2 rounded-lg font-medium transition-all"
                             style={{
-                              border: "none",
                               cursor: "pointer",
                               background: active ? "rgba(65,205,82,0.15)" : "transparent",
                               color: active ? "#1d7a2e" : "#64748b",
                             }}
                           >
-                            <span className="truncate">{m}</span>
+                            <span className="flex items-center gap-2 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={active}
+                                onChange={() =>
+                                  setFilterModule((prev) =>
+                                    prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]
+                                  )
+                                }
+                              />
+                              <span className="truncate">{m}</span>
+                            </span>
                             <span className="text-[11px]" style={{ color: active ? "#1d7a2e" : "#94a3b8" }}>{count}</span>
-                          </button>
+                          </label>
                         );
                       })}
                     </div>
