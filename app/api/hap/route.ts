@@ -1,38 +1,59 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as fs from "fs";
 import * as path from "path";
 import { saveHapFile, parseHap, getModules } from "@/lib/hap-parser";
-
-const UPLOAD_DIR = path.join(process.cwd(), "data", "uploads");
+import { UPLOAD_DIR } from "@/lib/paths";
 
 /** POST /api/hap - 上传 HAP 文件 */
 export async function POST(req: NextRequest) {
   try {
-    const formData = await req.formData();
-    const file = formData.get("file") as File | null;
-    if (!file) return NextResponse.json({ error: "未提供文件" }, { status: 400 });
-    if (!file.name.endsWith(".hap")) {
-      return NextResponse.json({ error: "请上传 .hap 文件" }, { status: 400 });
+    const contentType = req.headers.get("content-type") || "";
+
+    let hapFilePath: string;
+    let fileName: string;
+
+    if (contentType.includes("application/json")) {
+      // Electron 路径模式：直接使用本地文件路径，不读入内存
+      const body = await req.json();
+      const { localPath, fileName: fn } = body as { localPath?: string; fileName?: string };
+      if (!localPath) return NextResponse.json({ error: "缺少 localPath" }, { status: 400 });
+      fileName = fn || path.basename(localPath);
+      if (!fileName.endsWith(".hap")) {
+        return NextResponse.json({ error: "请上传 .hap 文件" }, { status: 400 });
+      }
+      if (!fs.existsSync(localPath)) {
+        return NextResponse.json({ error: `文件不存在: ${localPath}` }, { status: 400 });
+      }
+      hapFilePath = localPath;
+    } else {
+      // FormData 模式（小文件 / 浏览器模式回退）
+      const formData = await req.formData();
+      const file = formData.get("file") as File | null;
+      if (!file) return NextResponse.json({ error: "未提供文件" }, { status: 400 });
+      if (!file.name.endsWith(".hap")) {
+        return NextResponse.json({ error: "请上传 .hap 文件" }, { status: 400 });
+      }
+      const buffer = Buffer.from(await file.arrayBuffer());
+      fileName = file.name;
+      hapFilePath = await saveHapFile(buffer, fileName, UPLOAD_DIR);
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const savePath = await saveHapFile(buffer, file.name, UPLOAD_DIR);
-
     // 解析测试库列表
-    const testLibs = await parseHap(savePath);
+    const testLibs = await parseHap(hapFilePath);
     const modules = getModules(testLibs);
     const archs = [...new Set(testLibs.map((t) => t.arch))];
 
     return NextResponse.json({
-      fileName: file.name,
-      savePath,
+      fileName,
+      filePath: hapFilePath,
       totalLibs: testLibs.length,
       modules,
       archs,
       testLibs,
     });
   } catch (e: unknown) {
-    const err = e as Error;
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const message = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -49,7 +70,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ fileName, totalLibs: testLibs.length, modules, archs, testLibs });
   } catch (e: unknown) {
-    const err = e as Error;
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const message = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

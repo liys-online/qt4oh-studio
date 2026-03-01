@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
 import * as path from "path";
-
-const FAULTLOG_DIR = path.join(process.cwd(), "data", "Faultlogger");
+import { FAULTLOG_DIR } from "@/lib/paths";
 
 /** GET /api/reports/crash/[filename] - 获取崩溃日志文件内容 */
 export async function GET(

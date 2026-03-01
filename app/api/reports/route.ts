@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import * as fs from "fs";
-import * as path from "path";
 import { loadSessions, computeSummary } from "@/lib/store";
-
-const FAULTLOG_DIR = path.join(process.cwd(), "data", "Faultlogger");
+import { FAULTLOG_DIR } from "@/lib/paths";
 
 /** GET /api/reports - 汇总所有会话的统计报告 */
 export async function GET() {

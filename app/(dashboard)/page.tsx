@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardBody, CardHeader, Chip, Button, Spinner } from "@heroui/react";
 import Link from "next/link";
+import { useDevices } from "./devices-context";
 
 interface Overview {
   totalSessions: number;
@@ -75,26 +76,54 @@ const statusLabelMap: Record<string, string> = {
 };
 
 export default function DashboardPage() {
+  const { devices, hdcVersion } = useDevices();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [devices, setDevices] = useState<{ id: string }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingAll, setDeletingAll] = useState(false);
+
+  const handleDeleteAll = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!confirm(`确认删除全部 ${sessions.filter(s => s.status !== "running").length} 条历史记录？此操作不可撤销。`)) return;
+    setDeletingAll(true);
+    try {
+      const res = await fetch("/api/tests", { method: "DELETE" });
+      if (!res.ok) { const d = await res.json(); alert(d.error || "删除失败"); return; }
+      await fetchData();
+    } finally {
+      setDeletingAll(false);
+    }
+  };
 
   const fetchData = async () => {
     try {
-      const [reportRes, deviceRes] = await Promise.all([
-        fetch("/api/reports"),
-        fetch("/api/devices"),
-      ]);
+      const reportRes = await fetch("/api/reports");
       const reportData = await reportRes.json();
-      const deviceData = await deviceRes.json();
       setOverview(reportData.overview);
       setSessions(reportData.sessions.slice(0, 5));
-      setDevices(deviceData.devices || []);
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm("确认删除这条历史记录？")) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/tests/${id}?action=delete`, { method: "DELETE" });
+      if (!res.ok) {
+        const d = await res.json();
+        alert(d.error || "删除失败");
+        return;
+      }
+      await fetchData();
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -118,7 +147,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-7">
       {/* Hero Header */}
-      <div className="relative overflow-hidden rounded-2xl p-7" style={{ background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #6d28d9 100%)" }}>
+      <div className="relative overflow-hidden rounded-2xl p-7" style={{ background: "linear-gradient(135deg, #1d252c 0%, #243040 50%, #1d252c 100%)" }}>
         {/* 装饰圆 */}
         <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-10" style={{ background: "white", transform: "translate(30%, -30%)" }} />
         <div className="absolute bottom-0 right-40 w-32 h-32 rounded-full opacity-10" style={{ background: "white", transform: "translate(0, 40%)" }} />
@@ -131,11 +160,19 @@ export default function DashboardPage() {
               </span>
             </div>
             <h1 className="text-2xl font-bold text-white">单元测试平台</h1>
-            <p className="text-sm mt-1" style={{ color: "rgba(199,210,254,0.85)" }}>
+            <p className="text-sm mt-1" style={{ color: "rgba(200,235,205,0.9)" }}>
               管理 HarmonyOS 设备、执行 Qt 测试并分析结果
             </p>
             {/* 设备状态内嵌 */}
             <div className="mt-4 flex items-center gap-3 flex-wrap">
+              {hdcVersion && (
+                <span className="flex items-center gap-1.5 text-xs px-3 py-1 rounded-full" style={{ background: "rgba(255,255,255,0.12)", color: "rgba(200,240,210,0.9)", border: "1px solid rgba(255,255,255,0.15)" }}>
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V9l-6-6z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v6h6" /></svg>
+                  HDC version: {hdcVersion}
+                </span>
+              )}
+            </div>
+            <div className="mt-3 flex items-center gap-3 flex-wrap">
               {devices.length === 0 ? (
                 <div className="flex items-center gap-2 text-xs" style={{ color: "rgba(254,202,202,0.9)" }}>
                   <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
@@ -166,12 +203,12 @@ export default function DashboardPage() {
       </div>
 
       {/* 统计卡片 */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           label="总测试数"
           value={overview?.totalTests ?? 0}
           sub={`${overview?.completedSessions ?? 0} 个会话`}
-          gradient="linear-gradient(135deg, #6366f1, #8b5cf6)"
+          gradient="linear-gradient(135deg, #41CD52, #21a834)"
           icon={
             <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -209,6 +246,16 @@ export default function DashboardPage() {
             </svg>
           }
         />
+        <StatCard
+          label="失败"
+          value={overview?.totalFailed ?? 0}
+          gradient="linear-gradient(135deg, #94a3b8, #64748b)"
+          icon={
+            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          }
+        />
       </div>
 
       {/* 中间行：通过率 + 快捷入口 */}
@@ -217,7 +264,7 @@ export default function DashboardPage() {
         <div className="lg:col-span-2 rounded-2xl p-5 shadow-sm" style={{ background: "rgba(255,255,255,0.8)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.9)" }}>
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm font-semibold text-gray-700">整体通过率</p>
-            <span className="text-2xl font-bold" style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+            <span className="text-2xl font-bold" style={{ background: "linear-gradient(135deg, #41CD52, #21a834)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
               {passRate}%
             </span>
           </div>
@@ -246,7 +293,7 @@ export default function DashboardPage() {
           <p className="text-sm font-semibold text-gray-700 mb-3">快捷操作</p>
           <div className="space-y-2">
             {[
-              { href: "/tests", label: "执行新测试", icon: "▶", gradient: "linear-gradient(135deg, #6366f1, #8b5cf6)" },
+              { href: "/tests", label: "执行新测试", icon: "▶", gradient: "linear-gradient(135deg, #41CD52, #21a834)" },
               { href: "/devices", label: "查看设备", icon: "📱", gradient: "linear-gradient(135deg, #0ea5e9, #0284c7)" },
               { href: "/reports", label: "分析报告", icon: "📊", gradient: "linear-gradient(135deg, #10b981, #059669)" },
             ].map((item) => (
@@ -254,7 +301,7 @@ export default function DashboardPage() {
                 key={item.href}
                 href={item.href}
                 className="flex items-center gap-3 p-2.5 rounded-xl hover:scale-[1.02] transition-transform"
-                style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.05), rgba(139,92,246,0.05))", border: "1px solid rgba(99,102,241,0.1)" }}
+                style={{ background: "linear-gradient(135deg, rgba(65,205,82,0.05), rgba(33,168,52,0.04))", border: "1px solid rgba(65,205,82,0.15)" }}
               >
                 <span className="w-8 h-8 rounded-lg flex items-center justify-center text-sm" style={{ background: item.gradient }}>
                   {item.icon}
@@ -273,9 +320,30 @@ export default function DashboardPage() {
       <div className="rounded-2xl shadow-sm overflow-hidden" style={{ background: "rgba(255,255,255,0.8)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.9)" }}>
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
           <h2 className="text-sm font-semibold text-gray-700">最近测试会话</h2>
-          <Button size="sm" variant="light" as={Link} href="/reports" className="text-indigo-500">
-            查看全部 →
-          </Button>
+          <div className="flex items-center gap-2">
+            {sessions.some(s => s.status !== "running") && (
+              <button
+                onClick={handleDeleteAll}
+                disabled={deletingAll}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all hover:bg-red-50 text-gray-400 hover:text-red-500 disabled:opacity-50"
+                title="全部删除"
+              >
+                {deletingAll ? (
+                  <Spinner size="sm" />
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    全部删除
+                  </>
+                )}
+              </button>
+            )}
+            <Button size="sm" variant="light" as={Link} href="/reports" className="text-indigo-500">
+              查看全部 →
+            </Button>
+          </div>
         </div>
         {sessions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 gap-3">
@@ -322,6 +390,22 @@ export default function DashboardPage() {
                   <Button size="sm" variant="light" as={Link} href={`/reports/${s.id}`} className="text-indigo-500 font-medium">
                     详情
                   </Button>
+                  {s.status !== "running" && (
+                    <button
+                      onClick={(e) => handleDelete(e, s.id)}
+                      disabled={deletingId === s.id}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:bg-red-50 text-gray-300 hover:text-red-400 disabled:opacity-50"
+                      title="删除记录"
+                    >
+                      {deletingId === s.id ? (
+                        <Spinner size="sm" />
+                      ) : (
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

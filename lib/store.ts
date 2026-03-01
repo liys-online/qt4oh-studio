@@ -5,9 +5,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-
-const DATA_DIR = path.join(process.cwd(), "data");
-const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json");
+import { APP_DATA_DIR, SESSIONS_FILE, FAULTLOG_DIR, REPORTS_BASE_DIR } from "./paths";
 
 export type TestStatus = "pending" | "running" | "success" | "timeout" | "crash" | "failed";
 
@@ -23,6 +21,8 @@ export interface TestResult {
   endTime?: string;
   /** 崩溃日志文件名列表 */
   crashLogs?: string[];
+  /** 测试结果 XML 报告相对路径（相对于 sessionReportDir） */
+  reportFile?: string;
   output?: string;
 }
 
@@ -50,7 +50,7 @@ export interface TestSession {
 }
 
 function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (!fs.existsSync(APP_DATA_DIR)) fs.mkdirSync(APP_DATA_DIR, { recursive: true });
 }
 
 export function loadSessions(): TestSession[] {
@@ -78,6 +78,98 @@ export function upsertSession(session: TestSession) {
   if (idx >= 0) sessions[idx] = session;
   else sessions.unshift(session);
   saveSessions(sessions);
+}
+
+export function deleteSession(id: string) {
+  const sessions = loadSessions();
+  const target = sessions.find((s) => s.id === id);
+  if (!target) return;
+
+  const otherSessions = sessions.filter((s) => s.id !== id);
+
+  // 收集其他会话仍在引用的崩溃日志文件名（防止误删共享文件）
+  const referencedLogs = new Set(
+    otherSessions.flatMap((s) => s.results.flatMap((r) => r.crashLogs ?? []))
+  );
+
+  // 删除本会话独有的崩溃日志文件
+  for (const result of target.results) {
+    for (const logFile of result.crashLogs ?? []) {
+      if (!referencedLogs.has(logFile)) {
+        const filePath = path.join(FAULTLOG_DIR, path.basename(logFile));
+        try {
+          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        } catch {
+          // 忽略删除失败（文件可能已不存在）
+        }
+      }
+    }
+  }
+
+  saveSessions(otherSessions);
+
+  // 删除该会话的 XML 报告目录
+  const reportDir = path.join(REPORTS_BASE_DIR, id);
+  if (fs.existsSync(reportDir)) {
+    try { fs.rmSync(reportDir, { recursive: true, force: true }); } catch { /* 忽略 */ }
+  }
+
+  // 清理孤立崩溃日志：删除磁盘上不被任何会话引用的文件
+  purgeOrphanCrashLogs(otherSessions);
+}
+
+/** 删除 Faultlogger 目录中不属于任何会话的孤立文件 */
+function purgeOrphanCrashLogs(sessions: TestSession[]) {
+  if (!fs.existsSync(FAULTLOG_DIR)) return;
+  const allReferenced = new Set(
+    sessions.flatMap((s) => s.results.flatMap((r) => r.crashLogs ?? []))
+  );
+  try {
+    const files = fs.readdirSync(FAULTLOG_DIR);
+    for (const file of files) {
+      if (!allReferenced.has(file)) {
+        try {
+          fs.unlinkSync(path.join(FAULTLOG_DIR, file));
+        } catch {
+          // 忽略
+        }
+      }
+    }
+  } catch {
+    // 目录不可读，忽略
+  }
+}
+
+/** 批量删除所有非运行中的会话（含崩溃日志和 XML 报告目录） */
+export function deleteAllSessions() {
+  const sessions = loadSessions();
+  const running = sessions.filter((s) => s.status === "running");
+  const toDelete = sessions.filter((s) => s.status !== "running");
+
+  const referencedLogs = new Set(
+    running.flatMap((s) => s.results.flatMap((r) => r.crashLogs ?? []))
+  );
+
+  for (const target of toDelete) {
+    // 删除独有崩溃日志
+    for (const result of target.results) {
+      for (const logFile of result.crashLogs ?? []) {
+        if (!referencedLogs.has(logFile)) {
+          const filePath = path.join(FAULTLOG_DIR, path.basename(logFile));
+          try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch { /* 忽略 */ }
+        }
+      }
+    }
+    // 删除 XML 报告目录
+    const reportDir = path.join(REPORTS_BASE_DIR, target.id);
+    if (fs.existsSync(reportDir)) {
+      try { fs.rmSync(reportDir, { recursive: true, force: true }); } catch { /* 忽略 */ }
+    }
+  }
+
+  saveSessions(running);
+  purgeOrphanCrashLogs(running);
+  return toDelete.length;
 }
 
 export function updateTestResult(

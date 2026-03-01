@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Modal, ModalBody, ModalContent, ModalHeader, Spinner } from "@heroui/react";
+import { Spinner } from "@heroui/react";
 import Link from "next/link";
 
 interface Session {
@@ -103,7 +103,7 @@ export default function ReportsPage() {
         <Link
           href="/tests"
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5"
-          style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}
+          style={{ background: "linear-gradient(135deg, #41CD52, #21a834)" }}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
@@ -258,7 +258,7 @@ export default function ReportsPage() {
                   <Link
                     href={`/reports/${s.id}`}
                     className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg transition-all hover:opacity-80"
-                    style={{ background: "rgba(99,102,241,0.1)", color: "#6366f1" }}
+                    style={{ background: "rgba(65,205,82,0.1)", color: "#1d7a2e" }}
                   >
                     详情
                   </Link>
@@ -269,26 +269,41 @@ export default function ReportsPage() {
         )}
       </div>
 
-      {/* 崩溃日志 Modal */}
-      <Modal
-        isOpen={!!selectedCrash}
-        onClose={() => setSelectedCrash(null)}
-        size="3xl"
-        scrollBehavior="inside"
-      >
-        <ModalContent>
-          <ModalHeader className="font-mono text-sm">{selectedCrash}</ModalHeader>
-          <ModalBody className="pb-6">
-            {crashLoading ? (
-              <div className="flex justify-center py-8"><Spinner /></div>
-            ) : (
-              <pre className="rounded-xl p-4 text-xs font-mono overflow-x-auto whitespace-pre-wrap" style={{ background: "#0f172a", color: "#94a3b8" }}>
-                {crashContent || "（文件内容为空）"}
-              </pre>
-            )}
-          </ModalBody>
-        </ModalContent>
-      </Modal>
+      {/* 崩溃日志 Modal（原生实现，避免 HeroUI portal 问题） */}
+      {!!selectedCrash && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 9999,
+            background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: "24px 16px",
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setSelectedCrash(null); }}
+        >
+          <div style={{
+            background: "#fff", borderRadius: 20, boxShadow: "0 24px 80px rgba(0,0,0,0.18)",
+            width: "100%", maxWidth: 800, maxHeight: "85vh",
+            display: "flex", flexDirection: "column", overflow: "hidden",
+          }}>
+            <div style={{ padding: "16px 24px", borderBottom: "1px solid rgba(0,0,0,0.06)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontFamily: "monospace", fontSize: 13, color: "#1e1b4b", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedCrash}</span>
+              <button
+                onClick={() => setSelectedCrash(null)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 20, lineHeight: 1, padding: "0 4px", flexShrink: 0 }}
+              >✕</button>
+            </div>
+            <div style={{ overflowY: "auto", padding: 16 }}>
+              {crashLoading ? (
+                <div className="flex justify-center py-8"><Spinner /></div>
+              ) : (
+                <pre className="rounded-xl p-4 text-xs font-mono overflow-x-auto whitespace-pre-wrap" style={{ background: "#0f172a", color: "#94a3b8" }}>
+                  {crashContent || "（文件内容为空）"}
+                </pre>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { getSession } from "@/lib/store";
 import {
   registerLogHandler,
   unregisterLogHandler,
+  getSessionLogs,
 } from "@/lib/test-runner";
 
 /**
@@ -19,7 +20,14 @@ export async function GET(
 
   const stream = new ReadableStream({
     start(controller) {
-      // 如果会话已完成，直接推送最终状态并关闭
+      // 先回放历史日志（无论会话是否仍在运行）
+      const history = getSessionLogs(id);
+      for (const entry of history) {
+        const data = JSON.stringify({ type: "log", message: entry.message, time: entry.time });
+        try { controller.enqueue(encoder.encode(`data: ${data}\n\n`)); } catch { return; }
+      }
+
+      // 如果会话已完成，推送最终状态并关闭
       if (session && session.status !== "running") {
         const data = JSON.stringify({ type: "done", session });
         controller.enqueue(encoder.encode(`data: ${data}\n\n`));

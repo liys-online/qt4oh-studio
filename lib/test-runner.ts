@@ -13,8 +13,10 @@ import {
   getFaultLogs,
   parseCrashLogs,
   downloadFaultLog,
+  downloadTestReport,
   installHap,
 } from "./hdc";
+import { parseXmlReport } from "./xml-report";
 import { parseHap, filterTestLibs, type TestLib } from "./hap-parser";
 import {
   upsertSession,
@@ -23,13 +25,14 @@ import {
   type TestSession,
   type TestResult,
 } from "./store";
-
-const FAULTLOG_DIR = path.join(process.cwd(), "data", "Faultlogger");
+import { FAULTLOG_DIR, REPORTS_BASE_DIR, LOGS_DIR } from "./paths";
 
 /** 全局存储运行中会话的日志回调，用于 SSE 推送 */
 const sessionLogHandlers = new Map<string, ((line: string) => void)[]>();
 /** 全局存储停止信号 */
 const sessionStopFlags = new Map<string, boolean>();
+/** 存储运行中会话的设备信息，用于立即 force-stop */
+const sessionMeta = new Map<string, { deviceId: string; packageName: string }>();
 
 export function registerLogHandler(sessionId: string, handler: (line: string) => void) {
   const handlers = sessionLogHandlers.get(sessionId) || [];
@@ -42,11 +45,39 @@ export function unregisterLogHandler(sessionId: string, handler: (line: string) 
   sessionLogHandlers.set(sessionId, handlers.filter((h) => h !== handler));
 }
 
+export function getSessionLogs(sessionId: string): { time: string; message: string }[] {
+  const file = path.join(LOGS_DIR, `${sessionId}.jsonl`);
+  if (!fs.existsSync(file)) return [];
+  try {
+    return fs.readFileSync(file, "utf-8")
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => JSON.parse(l));
+  } catch {
+    return [];
+  }
+}
+
 export function stopSession(sessionId: string) {
   sessionStopFlags.set(sessionId, true);
+  // 立即向设备发送 force-stop，不等待当前测试的轮询检测到标志位
+  const meta = sessionMeta.get(sessionId);
+  if (meta) {
+    killProcess(meta.deviceId, meta.packageName).catch(() => {});
+  }
 }
 
 function emit(sessionId: string, line: string) {
+  const time = new Date().toISOString();
+  // 将日志追加写入文件（JSONL），就算热更新/重启也不丢失
+  try {
+    if (!fs.existsSync(LOGS_DIR)) fs.mkdirSync(LOGS_DIR, { recursive: true });
+    fs.appendFileSync(
+      path.join(LOGS_DIR, `${sessionId}.jsonl`),
+      JSON.stringify({ time, message: line }) + "\n",
+      "utf-8"
+    );
+  } catch { /* ignore write errors */ }
   const handlers = sessionLogHandlers.get(sessionId) || [];
   for (const h of handlers) h(line);
 }
@@ -103,6 +134,7 @@ export async function startTestSession(options: RunOptions): Promise<string> {
   };
   upsertSession(session);
   sessionStopFlags.set(sessionId, false);
+  sessionMeta.set(sessionId, { deviceId, packageName });
 
   // 异步执行，不阻塞 API 返回
   runSession(sessionId, session, hapFilePath, architectures, skipInstall).catch(
@@ -130,8 +162,11 @@ async function runSession(
 
   // 1. 安装 HAP
   if (!skipInstall) {
+    emit(sessionId, `[INFO] ── 阶段 1/4：上传并安装 HAP ──`);
     emit(sessionId, `[INFO] 正在安装 HAP: ${session.hapFile}`);
-    const { success, message } = installHap(deviceId, hapFilePath, packageName);
+    const { success, message } = await installHap(deviceId, hapFilePath, packageName, (cmd) => {
+      emit(sessionId, `[CMD] ${cmd}`);
+    });
     if (!success) {
       emit(sessionId, `[ERROR] 安装失败: ${message}`);
       session.status = "stopped";
@@ -145,6 +180,7 @@ async function runSession(
   }
 
   // 2. 解析 HAP，获取测试库列表
+  emit(sessionId, `[INFO] ── 阶段 2/4：解析 HAP，枚举测试库 ──`);
   emit(sessionId, `[INFO] 解析 HAP 包...`);
   let allLibs: TestLib[];
   try {
@@ -168,6 +204,7 @@ async function runSession(
   emit(sessionId, `[INFO] 共找到 ${libs.length} 个测试库`);
 
   // 3. 初始化 result 列表
+  emit(sessionId, `[INFO] ── 阶段 3/4：记录基线崩溃日志 ──`);
   session.results = libs.map((lib) => ({
     id: uuidv4(),
     arch: lib.arch,
@@ -180,11 +217,12 @@ async function runSession(
 
   // 4. 记录初始崩溃日志，用于后续对比
   const knownCrashLogs = new Set<string>(
-    parseCrashLogs(getFaultLogs(deviceId), packageName)
+    parseCrashLogs(await getFaultLogs(deviceId), packageName)
   );
   emit(sessionId, `[INFO] 已记录 ${knownCrashLogs.size} 条已有崩溃日志`);
 
   // 5. 逐一运行测试
+  emit(sessionId, `[INFO] ── 阶段 4/4：逐一执行测试库 ──`);
   for (let i = 0; i < session.results.length; i++) {
     if (sessionStopFlags.get(sessionId)) {
       emit(sessionId, `[INFO] 收到停止信号，终止测试`);
@@ -203,7 +241,9 @@ async function runSession(
     });
 
     // 启动测试
-    const startOutput = startAbility(deviceId, packageName, abilityName, lib.path);
+    const startOutput = await startAbility(deviceId, packageName, abilityName, lib.path, (cmd) => {
+      emit(sessionId, `[CMD] ${cmd}`);
+    });
     if (startOutput) emit(sessionId, `[HDC] ${startOutput}`);
 
     // 等待进程启动
@@ -214,8 +254,12 @@ async function runSession(
     let testStatus: "success" | "timeout" = "success";
 
     while (elapsed < timeout) {
-      if (sessionStopFlags.get(sessionId)) break;
-      if (!checkProcessRunning(deviceId, packageName)) {
+      if (sessionStopFlags.get(sessionId)) {
+        emit(sessionId, `[INFO] 检测到停止信号，强制停止当前测试`);
+        await killProcess(deviceId, packageName);
+        break;
+      }
+      if (!await checkProcessRunning(deviceId, packageName)) {
         emit(sessionId, `[INFO] 测试完成 (${elapsed}s)`);
         break;
       }
@@ -226,13 +270,13 @@ async function runSession(
 
     if (elapsed >= timeout) {
       emit(sessionId, `[WARN] 测试超时 (${timeout}s)，强制终止`);
-      killProcess(deviceId, packageName);
+      await killProcess(deviceId, packageName);
       await sleep(1000);
       testStatus = "timeout";
     }
 
     // 检查崩溃日志
-    const currentCrashLogs = parseCrashLogs(getFaultLogs(deviceId), packageName);
+    const currentCrashLogs = parseCrashLogs(await getFaultLogs(deviceId), packageName);
     const newCrashes = currentCrashLogs.filter((c) => !knownCrashLogs.has(c));
 
     let finalStatus: TestResult["status"] = testStatus;
@@ -245,7 +289,7 @@ async function runSession(
         emit(sessionId, `[CRASH] ${crashLog}`);
         knownCrashLogs.add(crashLog);
         crashLogFiles.push(crashLog);
-        const ok = downloadFaultLog(deviceId, crashLog, FAULTLOG_DIR);
+        const ok = await downloadFaultLog(deviceId, crashLog, FAULTLOG_DIR);
         emit(sessionId, ok ? `[INFO] 已下载崩溃日志: ${crashLog}` : `[WARN] 下载失败: ${crashLog}`);
       }
     }
@@ -253,10 +297,54 @@ async function runSession(
     result.status = finalStatus;
     result.endTime = new Date().toISOString();
     result.crashLogs = crashLogFiles;
+
+    // 下载并解析 XML 测试报告
+    const sessionReportDir = path.join(REPORTS_BASE_DIR, sessionId);
+    const xmlLocalPath = await downloadTestReport(deviceId, packageName, lib.path, sessionReportDir, (cmd) => {
+      emit(sessionId, `[CMD] ${cmd}`);
+    });
+
+    let reportFile: string | undefined;
+    if (xmlLocalPath) {
+      // reportFile 存相对路径（相对 sessionReportDir）
+      reportFile = path.relative(sessionReportDir, xmlLocalPath);
+      emit(sessionId, `[INFO] XML 报告已下载: ${reportFile}`);
+      try {
+        const xmlContent = fs.readFileSync(xmlLocalPath, "utf-8");
+        const xmlResult = parseXmlReport(xmlContent);
+        // 测试函数有任何失败则覆盖状态为 failed（崩溃优先级更高）
+        if (finalStatus !== "crash" && finalStatus !== "timeout") {
+          finalStatus = xmlResult.passed ? "success" : "failed";
+        }
+        const failedFuncs = xmlResult.functions.filter((f) => f.hasFailed);
+        if (failedFuncs.length > 0) {
+          emit(sessionId, `[WARN] XML 报告: ${failedFuncs.length} 个测试函数失败`);
+          for (const fn of failedFuncs.slice(0, 5)) {
+            emit(sessionId, `[FAIL] 函数: ${fn.name}${fn.message ? " - " + fn.message.trim().slice(0, 120) : ""}`);
+          }
+        }
+      } catch (e) {
+        emit(sessionId, `[WARN] XML 解析失败: ${(e as Error).message}`);
+      }
+    } else {
+      emit(sessionId, `[WARN] XML 报告下载失败`);
+      // 报告下载失败时，若非崩溃/超时，标记为 failed（无法确认测试结果）
+      if (finalStatus !== "crash" && finalStatus !== "timeout") {
+        finalStatus = "failed";
+        emit(sessionId, `[WARN] 无法获取测试报告，判定为失败`);
+      }
+    }
+
+    result.status = finalStatus;
+    result.endTime = new Date().toISOString();
+    result.crashLogs = crashLogFiles;
+    result.reportFile = reportFile;
+
     updateTestResult(sessionId, result.id, {
       status: finalStatus,
       endTime: result.endTime,
       crashLogs: crashLogFiles,
+      reportFile,
     });
 
     emit(
@@ -279,4 +367,5 @@ async function runSession(
 
   sessionLogHandlers.delete(sessionId);
   sessionStopFlags.delete(sessionId);
+  sessionMeta.delete(sessionId);
 }
