@@ -45,7 +45,14 @@ data/
 
 # 本地脚本工具
 script/
+report/
 
 # Electron 构建产物
 electron-dist/
 release/
+
+# webstorm
+.idea
+
+# vscode
+.vscode
