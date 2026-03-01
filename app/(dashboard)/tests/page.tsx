@@ -63,6 +63,8 @@ export default function TestsPage() {
   const [filterArch, setFilterArch] = useState("");
   const [filterModule, setFilterModule] = useState("");
   const [filterPattern, setFilterPattern] = useState("");
+  const [packageName, setPackageName] = useState("com.qtsig.qtest");
+  const [abilityName, setAbilityName] = useState("EntryAbility");
   const [timeout, setTimeout_] = useState(300);
   const [skipInstall, setSkipInstall] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -189,6 +191,8 @@ export default function TestsPage() {
           // filePath 优先（Electron 路径模式），否则回退到 fileName
           ...(hapInfo.filePath ? { hapFilePath: hapInfo.filePath } : { fileName: hapInfo.fileName }),
           deviceId: selectedDevice,
+          packageName,
+          abilityName,
           filterArch: filterArch || undefined,
           filterModule: filterModule || undefined,
           filterPattern: filterPattern || undefined,
@@ -243,9 +247,19 @@ export default function TestsPage() {
     const total = s.summary?.total ?? s.results.length;
     const success = s.summary?.success ?? s.results.filter((r) => r.status === "success").length;
     const percent = total > 0 ? Math.round((success / total) * 100) : 0;
+    const openSession = () => router.push(`/tests/${s.id}`);
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openSession();
+      }
+    };
     return (
-      <button
-        onClick={() => router.push(`/tests/${s.id}`)}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={openSession}
+        onKeyDown={handleKeyDown}
         className="w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:scale-[1.01]"
         style={{ background: s.status === "running" ? "linear-gradient(135deg,rgba(65,205,82,0.07),rgba(33,168,52,0.06))" : "rgba(0,0,0,0.03)", border: s.status === "running" ? "1.5px solid rgba(65,205,82,0.25)" : "1.5px solid rgba(0,0,0,0.07)" }}
       >
@@ -298,12 +312,12 @@ export default function TestsPage() {
         <svg className="w-4 h-4 text-gray-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
-      </button>
+      </div>
     );
   }
 
   return (
-    <div className="space-y-7 max-w-2xl">
+    <div className="space-y-7 max-w-6xl mx-auto">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-800">测试执行</h1>
@@ -561,81 +575,109 @@ export default function TestsPage() {
             <h2 className="text-sm font-semibold text-gray-800">测试配置</h2>
             <span className="text-xs text-gray-400 ml-auto">均为可选项</span>
           </div>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="space-y-4">
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1.5 block">架构过滤</label>
-                <select
-                  value={filterArch}
-                  onChange={(e) => setFilterArch(e.target.value)}
+                <label className="text-xs font-medium text-gray-500 mb-1.5 block">包名</label>
+                <input
+                  type="text"
+                  placeholder="com.qtsig.qtest"
+                  value={packageName}
+                  onChange={(e) => setPackageName(e.target.value)}
                   className="w-full text-sm rounded-xl px-3 py-2.5 outline-none transition-all"
                   style={{ background: "rgba(0,0,0,0.04)", border: "1.5px solid rgba(0,0,0,0.1)" }}
-                >
-                  <option value="">全部架构</option>
-                  {hapInfo.archs.map((a) => <option key={a} value={a}>{a}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-500 mb-1.5 block">模块过滤</label>
-                <select
-                  value={filterModule}
-                  onChange={(e) => setFilterModule(e.target.value)}
-                  className="w-full text-sm rounded-xl px-3 py-2.5 outline-none transition-all"
-                  style={{ background: "rgba(0,0,0,0.04)", border: "1.5px solid rgba(0,0,0,0.1)" }}
-                >
-                  <option value="">全部模块</option>
-                  {hapInfo.modules.map((m) => <option key={m} value={m}>{m}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-gray-500 mb-1.5 block">名称过滤（可选）</label>
-              <input
-                type="text"
-                placeholder="如: qatomic"
-                value={filterPattern}
-                onChange={(e) => setFilterPattern(e.target.value)}
-                className="w-full text-sm rounded-xl px-3 py-2.5 outline-none transition-all"
-                style={{ background: "rgba(0,0,0,0.04)", border: "1.5px solid rgba(0,0,0,0.1)" }}
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-gray-500 mb-1.5 block">单个测试超时</label>
-              <div className="flex gap-2">
-                {TIMEOUT_OPTIONS.map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setTimeout_(t)}
-                    className="flex-1 py-2 rounded-xl text-xs font-medium transition-all"
-                    style={
-                      timeout === t
-                        ? { background: "linear-gradient(135deg, #41CD52, #21a834)", color: "white" }
-                        : { background: "rgba(0,0,0,0.04)", color: "#64748b", border: "1.5px solid rgba(0,0,0,0.08)" }
-                    }
-                  >
-                    {t}s
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between p-3 rounded-xl" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.06)" }}>
-              <div>
-                <p className="text-sm font-medium text-gray-700">跳过安装步骤</p>
-                <p className="text-xs text-gray-400">HAP 已安装时可跳过以节省时间</p>
-              </div>
-              <button
-                onClick={() => setSkipInstall(!skipInstall)}
-                className="w-11 h-6 rounded-full transition-all relative"
-                style={{ background: skipInstall ? "linear-gradient(135deg, #41CD52, #21a834)" : "rgba(0,0,0,0.15)" }}
-              >
-                <span
-                  className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all"
-                  style={{ left: skipInstall ? "calc(100% - 22px)" : "2px" }}
                 />
-              </button>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1.5 block">Ability</label>
+                <input
+                  type="text"
+                  placeholder="EntryAbility"
+                  value={abilityName}
+                  onChange={(e) => setAbilityName(e.target.value)}
+                  className="w-full text-sm rounded-xl px-3 py-2.5 outline-none transition-all"
+                  style={{ background: "rgba(0,0,0,0.04)", border: "1.5px solid rgba(0,0,0,0.1)" }}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">架构过滤</label>
+                  <select
+                    value={filterArch}
+                    onChange={(e) => setFilterArch(e.target.value)}
+                    className="w-full text-sm rounded-xl px-3 py-2.5 outline-none transition-all"
+                    style={{ background: "rgba(0,0,0,0.04)", border: "1.5px solid rgba(0,0,0,0.1)" }}
+                  >
+                    <option value="">全部架构</option>
+                    {hapInfo.archs.map((a) => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">模块过滤</label>
+                  <select
+                    value={filterModule}
+                    onChange={(e) => setFilterModule(e.target.value)}
+                    className="w-full text-sm rounded-xl px-3 py-2.5 outline-none transition-all"
+                    style={{ background: "rgba(0,0,0,0.04)", border: "1.5px solid rgba(0,0,0,0.1)" }}
+                  >
+                    <option value="">全部模块</option>
+                    {hapInfo.modules.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1.5 block">名称过滤（可选）</label>
+                <input
+                  type="text"
+                  placeholder="如: qatomic"
+                  value={filterPattern}
+                  onChange={(e) => setFilterPattern(e.target.value)}
+                  className="w-full text-sm rounded-xl px-3 py-2.5 outline-none transition-all"
+                  style={{ background: "rgba(0,0,0,0.04)", border: "1.5px solid rgba(0,0,0,0.1)" }}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1.5 block">单个测试超时</label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {TIMEOUT_OPTIONS.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setTimeout_(t)}
+                      className="py-2 rounded-xl text-xs font-medium transition-all"
+                      style={
+                        timeout === t
+                          ? { background: "linear-gradient(135deg, #41CD52, #21a834)", color: "white" }
+                          : { background: "rgba(0,0,0,0.04)", color: "#64748b", border: "1.5px solid rgba(0,0,0,0.08)" }
+                      }
+                    >
+                      {t}s
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between p-3 rounded-xl" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.06)" }}>
+                <div>
+                  <p className="text-sm font-medium text-gray-700">跳过安装步骤</p>
+                  <p className="text-xs text-gray-400">HAP 已安装时可跳过以节省时间</p>
+                </div>
+                <button
+                  onClick={() => setSkipInstall(!skipInstall)}
+                  className="w-11 h-6 rounded-full transition-all relative"
+                  style={{ background: skipInstall ? "linear-gradient(135deg, #41CD52, #21a834)" : "rgba(0,0,0,0.15)" }}
+                >
+                  <span
+                    className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all"
+                    style={{ left: skipInstall ? "calc(100% - 22px)" : "2px" }}
+                  />
+                </button>
+              </div>
             </div>
           </div>
         </div>
