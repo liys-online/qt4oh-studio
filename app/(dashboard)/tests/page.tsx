@@ -747,75 +747,85 @@ export default function TestsPage() {
         </div>
 
         {/* 会话区（全宽） */}
-        <div className="space-y-7">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           {/* 运行中的会话 */}
-          {runningSessions.length > 0 && (
-            <div className="rounded-2xl p-4 shadow-sm" style={{ background: "linear-gradient(135deg,rgba(65,205,82,0.08),rgba(33,168,52,0.05))", border: "1.5px solid rgba(65,205,82,0.25)", backdropFilter: "blur(12px)" }}>
-              <div className="flex items-center gap-2 mb-3">
-                <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "#41CD52" }} />
-                <h2 className="text-sm font-semibold" style={{ color: "#1a6628" }}>进行中的测试</h2>
-                <span className="text-xs px-1.5 py-0.5 rounded-full font-bold ml-auto" style={{ background: "rgba(65,205,82,0.15)", color: "#1d7a2e" }}>{runningSessions.length}</span>
-              </div>
+          <div className="rounded-2xl p-4 shadow-sm" style={{ background: "linear-gradient(135deg,rgba(65,205,82,0.08),rgba(33,168,52,0.05))", border: "1.5px solid rgba(65,205,82,0.25)", backdropFilter: "blur(12px)" }}>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "#41CD52" }} />
+              <h2 className="text-sm font-semibold" style={{ color: "#1a6628" }}>进行中的测试</h2>
+              <span className="text-xs px-1.5 py-0.5 rounded-full font-bold ml-auto" style={{ background: "rgba(65,205,82,0.15)", color: "#1d7a2e" }}>{runningSessions.length}</span>
+            </div>
+            {runningSessions.length > 0 ? (
               <div className="space-y-2">
                 {runningSessions.map((s) => <SessionCard key={s.id} s={s} />)}
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="rounded-xl p-6 text-center" style={{ background: "rgba(255,255,255,0.7)", border: "1px dashed rgba(65,205,82,0.2)" }}>
+                <p className="text-sm text-gray-500">暂无运行中的测试</p>
+                <p className="text-xs text-gray-400 mt-1">配置参数后点击开始执行测试</p>
+              </div>
+            )}
+          </div>
 
           {/* 历史记录 */}
-          {historySessions.length > 0 && (
-            <div className="rounded-2xl shadow-sm overflow-hidden" style={cardStyle}>
-              <div className="flex items-center gap-2 px-4 py-3 hover:bg-black/[0.02] transition-colors">
+          <div className="rounded-2xl shadow-sm overflow-hidden" style={cardStyle}>
+            <div className="flex items-center gap-2 px-4 py-3 hover:bg-black/[0.02] transition-colors">
+              <div
+                className="flex items-center gap-2 flex-1 cursor-pointer"
+                onClick={() => setShowHistory(!showHistory)}
+              >
+                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-sm font-semibold text-gray-600">历史记录</span>
+                <span className="text-xs px-1.5 py-0.5 rounded-full ml-1" style={{ background: "rgba(0,0,0,0.06)", color: "#94a3b8" }}>{historySessions.length}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {historySessions.length > 0 && (
+                  <button
+                    onClick={handleDeleteAll}
+                    disabled={deletingAll}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all hover:bg-red-50 text-gray-400 hover:text-red-500 disabled:opacity-50"
+                    title="全部删除"
+                  >
+                    {deletingAll ? (
+                      <Spinner size="sm" />
+                    ) : (
+                      <>
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        全部删除
+                      </>
+                    )}
+                  </button>
+                )}
                 <div
-                  className="flex items-center gap-2 flex-1 cursor-pointer"
+                  className="cursor-pointer"
                   onClick={() => setShowHistory(!showHistory)}
                 >
-                  <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <svg className={`w-4 h-4 text-gray-400 transition-transform ${showHistory ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
-                  <span className="text-sm font-semibold text-gray-600">历史记录</span>
-                  <span className="text-xs px-1.5 py-0.5 rounded-full ml-1" style={{ background: "rgba(0,0,0,0.06)", color: "#94a3b8" }}>{historySessions.length}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {historySessions.length > 0 && (
-                    <button
-                      onClick={handleDeleteAll}
-                      disabled={deletingAll}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all hover:bg-red-50 text-gray-400 hover:text-red-500 disabled:opacity-50"
-                      title="全部删除"
-                    >
-                      {deletingAll ? (
-                        <Spinner size="sm" />
-                      ) : (
-                        <>
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                          全部删除
-                        </>
-                      )}
-                    </button>
-                  )}
-                  <div
-                    className="cursor-pointer"
-                    onClick={() => setShowHistory(!showHistory)}
-                  >
-                    <svg className={`w-4 h-4 text-gray-400 transition-transform ${showHistory ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
                 </div>
               </div>
-              {showHistory && (
-                <div className="px-4 pb-4 space-y-2">
-                  {historySessions.slice(0, 10).map((s) => <SessionCard key={s.id} s={s} />)}
-                  {historySessions.length > 10 && (
-                    <p className="text-xs text-center text-gray-400 pt-1">仅显示最近 10 条</p>
-                  )}
-                </div>
-              )}
             </div>
-          )}
+            {historySessions.length === 0 ? (
+              <div className="px-4 pb-5">
+                <div className="rounded-xl p-6 text-center" style={{ background: "rgba(0,0,0,0.02)", border: "1px dashed rgba(0,0,0,0.08)" }}>
+                  <p className="text-sm text-gray-500">暂无历史记录</p>
+                  <p className="text-xs text-gray-400 mt-1">完成测试后会显示在这里</p>
+                </div>
+              </div>
+            ) : showHistory ? (
+              <div className="px-4 pb-4 space-y-2">
+                {historySessions.slice(0, 10).map((s) => <SessionCard key={s.id} s={s} />)}
+                {historySessions.length > 10 && (
+                  <p className="text-xs text-center text-gray-400 pt-1">仅显示最近 10 条</p>
+                )}
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>

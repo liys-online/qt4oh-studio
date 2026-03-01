@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardBody, CardHeader, Chip, Button, Spinner } from "@heroui/react";
+import { Chip, Button, Spinner } from "@heroui/react";
 import Link from "next/link";
 import { useDevices } from "./devices-context";
 

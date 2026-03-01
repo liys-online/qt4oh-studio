@@ -4,9 +4,9 @@
  * HAP 本质是 ZIP 压缩包
  */
 
-import * as fs from "fs";
-import * as path from "path";
-import * as unzipper from "unzipper";
+import * as fs from 'fs';
+import * as path from 'path';
+import * as unzipper from 'unzipper';
 
 export interface TestLib {
   arch: string;
@@ -46,14 +46,14 @@ export async function parseHap(
 
         // 提取模块名：tests/{module}/...
         const parts = relativePath.split("/");
-        const module =
+        const moduleName =
           parts.length >= 2 && parts[0] === "tests" ? parts[1] : "unknown";
 
         testLibs.push({
           arch,
           path: relativePath,
           name: fileName,
-          module,
+          module: moduleName,
         });
       }
     }

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -61,10 +62,12 @@ export function Sidebar() {
 
       {/* Logo */}
       <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, padding: "20px 20px 16px" }}>
-        <img
+        <Image
           src="/logo.svg"
           alt="logo"
-          style={{ width: 96, height: 96, borderRadius: 16, objectFit: "contain", flexShrink: 0 }}
+          width={96}
+          height={96}
+          style={{ borderRadius: 16, objectFit: "contain", flexShrink: 0 }}
         />
         <div>
           <p style={{ fontSize: 14, fontWeight: 700, color: "white", lineHeight: 1.2, margin: 0 }}>Qt4OH Studio</p>

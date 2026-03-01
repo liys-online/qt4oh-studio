@@ -95,7 +95,8 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
       .catch(() => setSessionLoading(false));
 
     const es = new EventSource(`/api/tests/${id}/stream`);
-    setConnected(true);
+
+    es.onopen = () => setConnected(true);
 
     es.onmessage = (e) => {
       const data = JSON.parse(e.data);
@@ -394,7 +395,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
                 if (isRunning || !hasCmds) return;
                 setExpandedIds((prev) => {
                   const next = new Set(prev);
-                  next.has(result.id) ? next.delete(result.id) : next.add(result.id);
+                  if (next.has(result.id)) { next.delete(result.id); } else { next.add(result.id); }
                   return next;
                 });
               };
