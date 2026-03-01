@@ -75,13 +75,20 @@ export function getModules(testLibs: TestLib[]): string[] {
 export function filterTestLibs(
   testLibs: TestLib[],
   filterArch?: string,
-  filterModule?: string,
+  filterModule?: string | string[],
   filterPattern?: string
 ): TestLib[] {
   let result = testLibs;
   if (filterArch) result = result.filter((t) => t.arch === filterArch);
-  if (filterModule)
-    result = result.filter((t) => t.path.startsWith(`tests/${filterModule}/`));
+
+  const modules = Array.isArray(filterModule)
+    ? filterModule.filter(Boolean)
+    : filterModule ? [filterModule] : [];
+
+  if (modules.length > 0) {
+    result = result.filter((t) => modules.some((m) => t.path.startsWith(`tests/${m}/`)));
+  }
+
   if (filterPattern)
     result = result.filter((t) => t.name.includes(filterPattern));
   return result;

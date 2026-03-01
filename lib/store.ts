@@ -33,7 +33,7 @@ export interface TestSession {
   packageName: string;
   abilityName: string;
   filterArch?: string;
-  filterModule?: string;
+  filterModule?: string | string[];
   filterPattern?: string;
   timeout: number;
   status: "running" | "completed" | "stopped";

@@ -93,7 +93,7 @@ export interface RunOptions {
   abilityName?: string;
   architectures?: string[];
   filterArch?: string;
-  filterModule?: string;
+  filterModule?: string | string[];
   filterPattern?: string;
   timeout?: number;
   skipInstall?: boolean;

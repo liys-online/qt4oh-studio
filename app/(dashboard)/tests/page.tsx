@@ -11,6 +11,7 @@ interface HapInfo {
   totalLibs: number;
   modules: string[];
   archs: string[];
+  testLibs?: { module: string }[];
 }
 
 interface SessionSummary {
@@ -61,7 +62,7 @@ export default function TestsPage() {
   const [dragging, setDragging] = useState(false);
 
   const [filterArch, setFilterArch] = useState("");
-  const [filterModule, setFilterModule] = useState("");
+  const [filterModule, setFilterModule] = useState<string[]>([]);
   const [filterPattern, setFilterPattern] = useState("");
   const [packageName, setPackageName] = useState("com.qtsig.qtest");
   const [abilityName, setAbilityName] = useState("EntryAbility");
@@ -194,7 +195,7 @@ export default function TestsPage() {
           packageName,
           abilityName,
           filterArch: filterArch || undefined,
-          filterModule: filterModule || undefined,
+          filterModule: filterModule.length > 0 ? filterModule : undefined,
           filterPattern: filterPattern || undefined,
           timeout,
           skipInstall,
@@ -213,6 +214,17 @@ export default function TestsPage() {
   const step1Done = !!selectedDevice;
   const step2Done = !!hapInfo;
   const step3Active = step1Done && step2Done;
+
+  const moduleCounts = (hapInfo?.testLibs ?? []).reduce<Record<string, number>>((acc, lib) => {
+    if (lib.module && lib.module !== "unknown") {
+      acc[lib.module] = (acc[lib.module] || 0) + 1;
+    }
+    return acc;
+  }, {});
+
+  const sortedModules = hapInfo?.modules
+    ? [...hapInfo.modules].sort((a, b) => (moduleCounts[b] || 0) - (moduleCounts[a] || 0))
+    : [];
 
   const runningSessions = sessions.filter((s) => s.status === "running");
   const historySessions = sessions.filter((s) => s.status !== "running");
@@ -615,16 +627,48 @@ export default function TestsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">模块过滤</label>
-                  <select
-                    value={filterModule}
-                    onChange={(e) => setFilterModule(e.target.value)}
-                    className="w-full text-sm rounded-xl px-3 py-2.5 outline-none transition-all"
-                    style={{ background: "rgba(0,0,0,0.04)", border: "1.5px solid rgba(0,0,0,0.1)" }}
-                  >
-                    <option value="">全部模块</option>
-                    {hapInfo.modules.map((m) => <option key={m} value={m}>{m}</option>)}
-                  </select>
+                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">模块过滤（可多选）</label>
+                  <div className="rounded-xl p-2" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.06)" }}>
+                    <button
+                      onClick={() => setFilterModule([])}
+                      className="w-full flex items-center justify-between text-xs px-3 py-2 rounded-lg font-medium transition-all"
+                      style={{
+                        border: "none",
+                        cursor: "pointer",
+                        background: filterModule.length === 0 ? "rgba(65,205,82,0.15)" : "transparent",
+                        color: filterModule.length === 0 ? "#1d7a2e" : "#64748b",
+                      }}
+                    >
+                      <span>全部模块</span>
+                      <span className="text-[11px]" style={{ color: "#94a3b8" }}>{hapInfo.totalLibs}</span>
+                    </button>
+                    <div className="mt-1 max-h-44 overflow-y-auto space-y-1 pr-1">
+                      {sortedModules.map((m) => {
+                        const active = filterModule.includes(m);
+                        const count = moduleCounts[m] || 0;
+                        return (
+                          <button
+                            key={m}
+                            onClick={() =>
+                              setFilterModule((prev) =>
+                                prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]
+                              )
+                            }
+                            className="w-full flex items-center justify-between text-xs px-3 py-2 rounded-lg font-medium transition-all"
+                            style={{
+                              border: "none",
+                              cursor: "pointer",
+                              background: active ? "rgba(65,205,82,0.15)" : "transparent",
+                              color: active ? "#1d7a2e" : "#64748b",
+                            }}
+                          >
+                            <span className="truncate">{m}</span>
+                            <span className="text-[11px]" style={{ color: active ? "#1d7a2e" : "#94a3b8" }}>{count}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
