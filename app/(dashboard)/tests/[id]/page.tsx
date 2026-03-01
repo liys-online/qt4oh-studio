@@ -55,6 +55,8 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   const [testCmdLogs, setTestCmdLogs] = useState<Record<string, LogEntry[]>>({});
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [logCollapsed, setLogCollapsed] = useState(false);
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [filterModule, setFilterModule] = useState("all");
   const logEndRef = useRef<HTMLDivElement>(null);
   const resultsEndRef = useRef<HTMLDivElement>(null);
   const currentTestIdRef = useRef<string | null>(null);
@@ -178,6 +180,15 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
     (r) => r.status !== "pending" && r.status !== "running"
   ).length;
   const total = session?.results.length ?? 0;
+
+  const statusFilters = ["all", "success", "timeout", "crash", "failed"];
+  const modules = ["all", ...Array.from(new Set((session?.results ?? []).map((r) => r.module)))];
+  const baseResults = (session?.results ?? []).filter((r) => r.status !== "pending");
+  const filteredResults = baseResults.filter((r) => {
+    const matchStatus = filterStatus === "all" || r.status === filterStatus;
+    const matchModule = filterModule === "all" || r.module === filterModule;
+    return matchStatus && matchModule;
+  });
 
   const cardStyle = {
     background: "rgba(255,255,255,0.85)",
@@ -303,18 +314,77 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
 
       {/* 测试结果列表 - 全宽 */}
       <div className="rounded-2xl p-5 shadow-sm flex flex-col flex-1 min-h-0" style={cardStyle}>
-        <h2 className="text-sm font-semibold text-gray-800 mb-3">
-          测试结果
-          {total > 0 && <span className="text-gray-400 font-normal ml-1">({completed}/{total})</span>}
-        </h2>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h2 className="text-sm font-semibold text-gray-800">
+            测试结果
+            {total > 0 && <span className="text-gray-400 font-normal ml-1">({completed}/{total})</span>}
+          </h2>
+          <span className="text-xs text-gray-400">显示 {filteredResults.length} 条</span>
+        </div>
+
+        {/* 分类过滤器 */}
+        <div className="flex flex-wrap gap-2 mb-3">
+          <div className="flex gap-2 flex-wrap">
+            {statusFilters.map((s) => {
+              const active = filterStatus === s;
+              const style = s !== "all" ? statusStyle[s] : null;
+              return (
+                <button
+                  key={s}
+                  onClick={() => setFilterStatus(s)}
+                  className="text-xs px-3 py-1 rounded-full font-semibold transition-all"
+                  style={{
+                    border: "none",
+                    cursor: "pointer",
+                    background: active
+                      ? (style ? style.bg : "rgba(65,205,82,0.15)")
+                      : "rgba(255,255,255,0.7)",
+                    color: active
+                      ? (style ? style.text : "#1d7a2e")
+                      : "#94a3b8",
+                    boxShadow: active ? "0 2px 8px rgba(0,0,0,0.08)" : "none",
+                  }}
+                >
+                  {s === "all" ? "全部" : statusStyle[s]?.label ?? s}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {modules.map((m) => {
+              const active = filterModule === m;
+              return (
+                <button
+                  key={m}
+                  onClick={() => setFilterModule(m)}
+                  className="text-xs px-3 py-1 rounded-full font-medium transition-all"
+                  style={{
+                    border: "none",
+                    cursor: "pointer",
+                    background: active ? "rgba(65,205,82,0.15)" : "rgba(255,255,255,0.7)",
+                    color: active ? "#1d7a2e" : "#94a3b8",
+                    boxShadow: active ? "0 2px 8px rgba(0,0,0,0.08)" : "none",
+                  }}
+                >
+                  {m === "all" ? "全部模块" : m}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1">
           {!session || session.results.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-10">
               <Spinner size="md" />
               <p className="text-xs text-gray-400">{sessionLoading ? "连接中..." : "解析测试库中..."}</p>
             </div>
+          ) : filteredResults.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-10">
+              <p className="text-xs text-gray-400">没有符合条件的结果</p>
+            </div>
           ) : (
-            session.results.filter((r) => r.status !== "pending").map((result) => {
+            filteredResults.map((result) => {
               const st = statusStyle[result.status] ?? statusStyle.pending;
               const isRunning = result.status === "running";
               const cmdLogs = testCmdLogs[result.id] ?? [];
