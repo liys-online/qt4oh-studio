@@ -16,7 +16,7 @@ export interface TestLib {
   module: string;
 }
 
-const DEFAULT_ARCHS = ["arm64-v8a", "armeabi-v7a", "x86_64"];
+const DEFAULT_ARCHS = ['arm64-v8a', 'armeabi-v7a', 'x86_64'];
 
 /** 从 HAP 文件中解析出所有测试库列表 */
 export async function parseHap(
@@ -36,18 +36,18 @@ export async function parseHap(
       const entryPath = file.path;
       if (
         entryPath.startsWith(testsPrefix) &&
-        entryPath.endsWith(".so")
+        entryPath.endsWith('.so')
       ) {
         const fileName = path.basename(entryPath);
-        if (!fileName.startsWith("libtst_")) continue;
+        if (!fileName.startsWith('libtst_')) { continue; }
 
         // 相对于 libs/{arch}/ 的路径
         const relativePath = entryPath.slice(prefix.length);
 
         // 提取模块名：tests/{module}/...
-        const parts = relativePath.split("/");
+        const parts = relativePath.split('/');
         const moduleName =
-          parts.length >= 2 && parts[0] === "tests" ? parts[1] : "unknown";
+          parts.length >= 2 && parts[0] === 'tests' ? parts[1] : 'unknown';
 
         testLibs.push({
           arch,
@@ -66,7 +66,7 @@ export async function parseHap(
 export function getModules(testLibs: TestLib[]): string[] {
   const modules = new Set<string>();
   for (const lib of testLibs) {
-    if (lib.module !== "unknown") modules.add(lib.module);
+    if (lib.module !== 'unknown') { modules.add(lib.module); }
   }
   return Array.from(modules).sort();
 }
@@ -79,7 +79,7 @@ export function filterTestLibs(
   filterPattern?: string
 ): TestLib[] {
   let result = testLibs;
-  if (filterArch) result = result.filter((t) => t.arch === filterArch);
+  if (filterArch) { result = result.filter((t) => t.arch === filterArch); }
 
   const modules = Array.isArray(filterModule)
     ? filterModule.filter(Boolean)
@@ -89,8 +89,9 @@ export function filterTestLibs(
     result = result.filter((t) => modules.some((m) => t.path.startsWith(`tests/${m}/`)));
   }
 
-  if (filterPattern)
+  if (filterPattern) {
     result = result.filter((t) => t.name.includes(filterPattern));
+  }
   return result;
 }
 
