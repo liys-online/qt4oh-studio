@@ -48,7 +48,7 @@ export function Sidebar() {
 
   return (
     <aside style={{
-      position: "fixed", left: 0, top: 0, height: "100vh", width: 240, minWidth: 240,
+      position: "fixed", left: 0, top: 0, height: "100vh", width: 250, minWidth: 250,
       display: "flex", flexDirection: "column", zIndex: 9999,
       background: "linear-gradient(180deg, #1a2433 0%, #1d252c 60%, #1a2433 100%)",
       overflowY: "auto",
@@ -62,9 +62,9 @@ export function Sidebar() {
       {/* Logo */}
       <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, padding: "20px 20px 16px" }}>
         <img
-          src="/logo.png"
+          src="/logo.svg"
           alt="logo"
-          style={{ width: 72, height: 72, borderRadius: 16, objectFit: "contain", flexShrink: 0 }}
+          style={{ width: 96, height: 96, borderRadius: 16, objectFit: "contain", flexShrink: 0 }}
         />
         <div>
           <p style={{ fontSize: 14, fontWeight: 700, color: "white", lineHeight: 1.2, margin: 0 }}>Qt4OH Studio</p>
