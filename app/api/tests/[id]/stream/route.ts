@@ -27,14 +27,6 @@ export async function GET(
         try { controller.enqueue(encoder.encode(`data: ${data}\n\n`)); } catch { return; }
       }
 
-      // 如果会话已完成，推送最终状态并关闭
-      if (session && session.status !== "running") {
-        const data = JSON.stringify({ type: "done", session });
-        controller.enqueue(encoder.encode(`data: ${data}\n\n`));
-        controller.close();
-        return;
-      }
-
       if (!session) {
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify({ type: "error", message: "会话不存在" })}\n\n`)
@@ -43,10 +35,27 @@ export async function GET(
         return;
       }
 
+      // 如果会话已完成，先推送最终状态；但仍保持连接以接收后续重跑推送
+      if (session.status !== "running") {
+        const data = JSON.stringify({ type: "done", session });
+        try { controller.enqueue(encoder.encode(`data: ${data}\n\n`)); } catch { return; }
+      }
+
       // 注册日志回调
       const handler = (line: string) => {
-        const data = JSON.stringify({ type: "log", message: line, time: new Date().toISOString() });
         try {
+          // 特殊格式：__status__:<JSON> — 由 rerunSingleTest 推送会话快照
+          if (line.startsWith("__status__:")) {
+            const sessionSnap = JSON.parse(line.slice("__status__:".length));
+            const isRunning = (sessionSnap as { status: string }).status === "running";
+            const data = JSON.stringify({
+              type: isRunning ? "status" : "done",
+              session: sessionSnap,
+            });
+            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+            return;
+          }
+          const data = JSON.stringify({ type: "log", message: line, time: new Date().toISOString() });
           controller.enqueue(encoder.encode(`data: ${data}\n\n`));
         } catch {
           // stream 已关闭
@@ -55,21 +64,20 @@ export async function GET(
 
       registerLogHandler(id, handler);
 
-      // 定期推送会话状态
+      // 定期推送会话状态（仅在运行中）
       const interval = setInterval(() => {
         const current = getSession(id);
         if (!current) return;
+        if (current.status !== "running") {
+          clearInterval(interval);
+          return;
+        }
         try {
           controller.enqueue(
             encoder.encode(
               `data: ${JSON.stringify({ type: "status", session: current })}\n\n`
             )
           );
-          if (current.status !== "running") {
-            clearInterval(interval);
-            unregisterLogHandler(id, handler);
-            controller.close();
-          }
         } catch {
           clearInterval(interval);
         }

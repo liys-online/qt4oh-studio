@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, deleteSession } from "@/lib/store";
-import { stopSession } from "@/lib/test-runner";
+import { stopSession, rerunSingleTest } from "@/lib/test-runner";
 
 /** GET /api/tests/[id] - 获取单个会话详情 */
 export async function GET(
@@ -11,6 +11,34 @@ export async function GET(
   const session = getSession(id);
   if (!session) return NextResponse.json({ error: "会话不存在" }, { status: 404 });
   return NextResponse.json({ session });
+}
+
+/**
+ * PATCH /api/tests/[id]
+ * Body: { resultId, hapFilePath?, deviceId?, timeout?, skipInstall? }
+ * 重新执行会话中指定的单条测试结果
+ */
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  try {
+    const body = await req.json();
+    const { resultId, hapFilePath, deviceId, timeout, skipInstall } = body as {
+      resultId: string;
+      hapFilePath?: string;
+      deviceId?: string;
+      timeout?: number;
+      skipInstall?: boolean;
+    };
+    if (!resultId) return NextResponse.json({ error: "缺少 resultId" }, { status: 400 });
+    await rerunSingleTest(id, resultId, { hapFilePath, deviceId, timeout, skipInstall });
+    return NextResponse.json({ ok: true });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
 }
 
 /**

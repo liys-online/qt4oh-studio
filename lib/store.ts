@@ -30,6 +30,8 @@ export interface TestSession {
   id: string;
   deviceId: string;
   hapFile: string;
+  /** HAP 文件的绝对路径，用于重新运行单个测试 */
+  hapFilePath?: string;
   packageName: string;
   abilityName: string;
   filterArch?: string;

@@ -122,6 +122,7 @@ export async function startTestSession(options: RunOptions): Promise<string> {
     id: sessionId,
     deviceId,
     hapFile: path.basename(hapFilePath),
+    hapFilePath,
     packageName,
     abilityName,
     filterArch,
@@ -368,4 +369,217 @@ async function runSession(
   sessionLogHandlers.delete(sessionId);
   sessionStopFlags.delete(sessionId);
   sessionMeta.delete(sessionId);
+}
+
+// ─────────────────────────────────────────────
+// 单测重新运行
+// ─────────────────────────────────────────────
+
+export interface RerunOptions {
+  /** 指定新的 HAP 路径；不传则使用会话原路径 */
+  hapFilePath?: string;
+  /** 设备 ID；不传则使用会话原设备 */
+  deviceId?: string;
+  /** 超时秒数；不传则使用会话原超时 */
+  timeout?: number;
+  /** 是否跳过重新安装 HAP */
+  skipInstall?: boolean;
+}
+
+/**
+ * 重新运行会话中的某一条测试，结果就地更新。
+ * 异步执行，立即返回。
+ */
+export async function rerunSingleTest(
+  sessionId: string,
+  resultId: string,
+  options: RerunOptions = {}
+): Promise<void> {
+  const session = (await import("./store")).getSession(sessionId);
+  if (!session) throw new Error(`会话不存在: ${sessionId}`);
+  if (session.status === "running") throw new Error("会话正在运行中，无法重跑单条测试");
+
+  const result = session.results.find((r) => r.id === resultId);
+  if (!result) throw new Error(`结果记录不存在: ${resultId}`);
+
+  const hapFilePath = options.hapFilePath ?? session.hapFilePath ?? "";
+  if (!hapFilePath) throw new Error("未指定 HAP 路径，且会话未记录原始路径");
+  if (!fs.existsSync(hapFilePath)) throw new Error(`HAP 文件不存在: ${hapFilePath}`);
+
+  const deviceId = options.deviceId ?? session.deviceId;
+  const timeout = options.timeout ?? session.timeout;
+  const packageName = session.packageName;
+  const abilityName = session.abilityName;
+  const skipInstall = options.skipInstall ?? false;
+
+  // 如果指定了新的 HAP 路径，更新会话记录
+  if (options.hapFilePath && options.hapFilePath !== session.hapFilePath) {
+    (await import("./store")).upsertSession({
+      ...session,
+      hapFilePath: options.hapFilePath,
+      hapFile: path.basename(options.hapFilePath),
+    });
+  }
+
+  // 将该条目标记为 running，推送状态更新
+  const store = await import("./store");
+  const rerunId = `${sessionId}:rerun:${resultId}`;
+  sessionStopFlags.set(rerunId, false);
+
+  // 立即告知前端该条目开始运行
+  updateTestResult(sessionId, resultId, { status: "running", startTime: new Date().toISOString() });
+  const updatedSession = store.getSession(sessionId)!;
+  const handlers = sessionLogHandlers.get(sessionId) ?? [];
+  for (const h of handlers) {
+    // 推送 status 事件让 SSE 客户端刷新
+    h(`__status__:${JSON.stringify(updatedSession)}`);
+  }
+
+  // 异步执行
+  _rerunSingleTestAsync(sessionId, resultId, rerunId, {
+    hapFilePath, deviceId, timeout, packageName, abilityName, skipInstall,
+    lib: { arch: result.arch, path: result.path, name: result.name, module: result.module },
+  }).catch((e) => {
+    emit(sessionId, `[ERROR] 重跑异常: ${e?.message || e}`);
+    updateTestResult(sessionId, resultId, { status: "failed", endTime: new Date().toISOString() });
+  });
+}
+
+async function _rerunSingleTestAsync(
+  sessionId: string,
+  resultId: string,
+  rerunId: string,
+  opts: {
+    hapFilePath: string;
+    deviceId: string;
+    timeout: number;
+    packageName: string;
+    abilityName: string;
+    skipInstall: boolean;
+    lib: { arch: string; path: string; name: string; module: string };
+  }
+) {
+  const { hapFilePath, deviceId, timeout, packageName, abilityName, skipInstall, lib } = opts;
+
+  emit(sessionId, `[INFO] ── 重新运行: ${lib.name} (${lib.arch}) ──`);
+
+  // 安装 HAP（可选）
+  if (!skipInstall) {
+    emit(sessionId, `[INFO] 正在安装 HAP: ${path.basename(hapFilePath)}`);
+    const { success, message } = await installHap(deviceId, hapFilePath, packageName, (cmd) => {
+      emit(sessionId, `[CMD] ${cmd}`);
+    });
+    if (!success) {
+      emit(sessionId, `[ERROR] 安装失败: ${message}`);
+      updateTestResult(sessionId, resultId, { status: "failed", endTime: new Date().toISOString() });
+      sessionStopFlags.delete(rerunId);
+      return;
+    }
+    emit(sessionId, `[INFO] 安装成功`);
+  }
+
+  // 记录已有崩溃日志
+  const knownCrashLogs = new Set<string>(
+    parseCrashLogs(await getFaultLogs(deviceId), packageName)
+  );
+
+  // 启动测试
+  const startOutput = await startAbility(deviceId, packageName, abilityName, lib.path, (cmd) => {
+    emit(sessionId, `[CMD] ${cmd}`);
+  });
+  if (startOutput) emit(sessionId, `[HDC] ${startOutput}`);
+
+  await sleep(1000);
+
+  // 等待完成或超时
+  let elapsed = 0;
+  let testStatus: "success" | "timeout" = "success";
+  while (elapsed < timeout) {
+    if (!await checkProcessRunning(deviceId, packageName)) {
+      emit(sessionId, `[INFO] 测试完成 (${elapsed}s)`);
+      break;
+    }
+    await sleep(2000);
+    elapsed += 2;
+  }
+  if (elapsed >= timeout) {
+    emit(sessionId, `[WARN] 测试超时 (${timeout}s)，强制终止`);
+    await killProcess(deviceId, packageName);
+    await sleep(1000);
+    testStatus = "timeout";
+  }
+
+  // 检查崩溃
+  const currentCrashLogs = parseCrashLogs(await getFaultLogs(deviceId), packageName);
+  const newCrashes = currentCrashLogs.filter((c) => !knownCrashLogs.has(c));
+  let finalStatus: TestResult["status"] = testStatus;
+  const crashLogFiles: string[] = [];
+
+  if (newCrashes.length > 0) {
+    finalStatus = "crash";
+    emit(sessionId, `[WARN] 检测到 ${newCrashes.length} 条新崩溃日志`);
+    for (const crashLog of newCrashes) {
+      emit(sessionId, `[CRASH] ${crashLog}`);
+      crashLogFiles.push(crashLog);
+      const ok = await downloadFaultLog(deviceId, crashLog, FAULTLOG_DIR);
+      emit(sessionId, ok ? `[INFO] 已下载崩溃日志: ${crashLog}` : `[WARN] 下载失败: ${crashLog}`);
+    }
+  }
+
+  // 下载并解析 XML 报告
+  const sessionReportDir = path.join(REPORTS_BASE_DIR, sessionId);
+  const xmlLocalPath = await downloadTestReport(deviceId, packageName, lib.path, sessionReportDir, (cmd) => {
+    emit(sessionId, `[CMD] ${cmd}`);
+  });
+
+  let reportFile: string | undefined;
+  if (xmlLocalPath) {
+    reportFile = path.relative(sessionReportDir, xmlLocalPath);
+    emit(sessionId, `[INFO] XML 报告已下载: ${reportFile}`);
+    try {
+      const xmlContent = fs.readFileSync(xmlLocalPath, "utf-8");
+      const xmlResult = parseXmlReport(xmlContent);
+      if (finalStatus !== "crash" && finalStatus !== "timeout") {
+        finalStatus = xmlResult.passed ? "success" : "failed";
+      }
+      const failedFuncs = xmlResult.functions.filter((f) => f.hasFailed);
+      if (failedFuncs.length > 0) {
+        emit(sessionId, `[WARN] XML 报告: ${failedFuncs.length} 个测试函数失败`);
+        for (const fn of failedFuncs.slice(0, 5)) {
+          emit(sessionId, `[FAIL] 函数: ${fn.name}${fn.message ? " - " + fn.message.trim().slice(0, 120) : ""}`);
+        }
+      }
+    } catch (e) {
+      emit(sessionId, `[WARN] XML 解析失败: ${(e as Error).message}`);
+    }
+  } else {
+    emit(sessionId, `[WARN] XML 报告下载失败`);
+    if (finalStatus !== "crash" && finalStatus !== "timeout") {
+      finalStatus = "failed";
+    }
+  }
+
+  updateTestResult(sessionId, resultId, {
+    status: finalStatus,
+    endTime: new Date().toISOString(),
+    crashLogs: crashLogFiles,
+    reportFile,
+  });
+
+  emit(sessionId, `[RESULT] ${lib.name}: ${finalStatus.toUpperCase()} (重跑完成)`);
+
+  // 重新计算 summary
+  const store = await import("./store");
+  const finalSession = store.getSession(sessionId);
+  if (finalSession) {
+    finalSession.summary = computeSummary(finalSession.results);
+    upsertSession(finalSession);
+    // 通知前端刷新
+    const handlers = sessionLogHandlers.get(sessionId) ?? [];
+    for (const h of handlers) {
+      h(`__status__:${JSON.stringify(finalSession)}`);
+    }
+  }
+
+  sessionStopFlags.delete(rerunId);
 }

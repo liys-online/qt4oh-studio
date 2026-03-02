@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Spinner } from "@heroui/react";
 
@@ -44,6 +44,7 @@ interface Summary {
 interface Session {
   id: string;
   hapFile: string;
+  hapFilePath?: string;
   deviceId: string;
   status: string;
   startTime: string;
@@ -79,12 +80,67 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
   const [xmlReport, setXmlReport] = useState<XmlReport | null>(null);
   const [xmlLoading, setXmlLoading] = useState(false);
   const [xmlError, setXmlError] = useState<string | null>(null);
+  // 重跑相关
+  const [rerunningId, setRerunningId] = useState<string | null>(null);
+  const [showChangeHap, setShowChangeHap] = useState(false);
+  const [newHapPath, setNewHapPath] = useState("");
+  const newHapFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch(`/api/tests/${id}`)
       .then((r) => r.json())
       .then((d) => setSession(d.session));
   }, [id]);
+
+  // SSE：接收重跑推送的实时状态更新
+  useEffect(() => {
+    const es = new EventSource(`/api/tests/${id}/stream`);
+    es.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if (data.type === "status" || data.type === "done") {
+        setSession(data.session);
+        const running = (data.session.results as TestResult[]).find((r: TestResult) => r.status === "running");
+        if (!running) setRerunningId(null);
+      }
+    };
+    es.onerror = () => es.close();
+    return () => es.close();
+  }, [id]);
+
+  const handleRerun = async (resultId: string, hapFilePath?: string) => {
+    if (rerunningId) return;
+    setRerunningId(resultId);
+    try {
+      const res = await fetch(`/api/tests/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resultId,
+          ...(hapFilePath ? { hapFilePath } : {}),
+          skipInstall: !hapFilePath,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        alert("重跑失败: " + (d.error || res.statusText));
+        setRerunningId(null);
+      }
+    } catch (e) {
+      alert("重跑失败: " + (e as Error).message);
+      setRerunningId(null);
+    }
+  };
+
+  const handleChangeHapFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const localPath = (file as unknown as { path?: string }).path;
+    if (localPath) {
+      setNewHapPath(localPath);
+    } else {
+      alert("请在 Electron 桌面客户端中使用此功能");
+    }
+  };
 
   const openCrash = async (filename: string) => {
     setSelectedCrash(filename);
@@ -178,13 +234,83 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
             {session.deviceId} · {new Date(session.startTime).toLocaleString("zh-CN")}
           </p>
         </div>
-        <span style={{
-          padding: "4px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600,
-          background: sStyle.bg, color: sStyle.text, flexShrink: 0,
-        }}>
-          {sStyle.label}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          {session.status !== "running" && (
+            <button
+              onClick={() => setShowChangeHap((v) => !v)}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                padding: "6px 14px", borderRadius: 10, fontSize: 12, fontWeight: 600,
+                background: showChangeHap ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.08)",
+                color: "#6366f1", border: "1px solid rgba(99,102,241,0.2)", cursor: "pointer",
+              }}
+            >
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              更换 HAP
+            </button>
+          )}
+          <span style={{
+            padding: "4px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600,
+            background: sStyle.bg, color: sStyle.text,
+          }}>
+            {sStyle.label}
+          </span>
+        </div>
       </div>
+
+      {/* 更换 HAP 面板 */}
+      {showChangeHap && session.status !== "running" && (
+        <div style={{
+          padding: 16, borderRadius: 14,
+          background: "rgba(99,102,241,0.06)", border: "1.5px solid rgba(99,102,241,0.18)",
+        }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 600, color: "#6366f1", margin: 0 }}>更换 HAP 包</p>
+              <p style={{ fontSize: 11, color: "#94a3b8", margin: "3px 0 0" }}>
+                当前：{session.hapFile}
+                {session.hapFilePath && (
+                  <span style={{ marginLeft: 6, fontFamily: "monospace", fontSize: 11, color: "#c7d2fe" }}>{session.hapFilePath}</span>
+                )}
+              </p>
+            </div>
+            <button
+              onClick={() => { setShowChangeHap(false); setNewHapPath(""); }}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 18, lineHeight: 1, padding: "0 4px" }}
+            >✕</button>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <input ref={newHapFileRef} type="file" accept=".hap" style={{ display: "none" }} onChange={handleChangeHapFile} />
+            <button
+              onClick={() => newHapFileRef.current?.click()}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                padding: "5px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+                background: "rgba(99,102,241,0.12)", color: "#6366f1",
+                border: "1px solid rgba(99,102,241,0.2)", cursor: "pointer",
+              }}
+            >
+              <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+              </svg>
+              选择新 HAP
+            </button>
+            {newHapPath ? (
+              <>
+                <span style={{ flex: 1, fontSize: 12, fontFamily: "monospace", color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{newHapPath}</span>
+                <button onClick={() => setNewHapPath("")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "#94a3b8" }}>清除</button>
+              </>
+            ) : (
+              <span style={{ flex: 1, fontSize: 12, color: "#94a3b8" }}>未选择，重跑时将使用原 HAP 包</span>
+            )}
+          </div>
+          {newHapPath && (
+            <p style={{ fontSize: 11, color: "#6366f1", margin: "8px 0 0" }}>重跑时将自动重新安装此 HAP 包</p>
+          )}
+        </div>
+      )}
 
       {/* 统计卡片 */}
       {summary && (
@@ -236,7 +362,23 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
       )}
 
       {/* 过滤器 */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      <div style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 10,
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 8,
+        paddingTop: 10,
+        paddingBottom: 10,
+        paddingLeft: 32,
+        paddingRight: 32,
+        margin: "0 -32px",
+        background: "rgba(244,246,248,0.98)",
+        backdropFilter: "blur(10px)",
+        WebkitBackdropFilter: "blur(10px)",
+        boxShadow: "0 2px 16px rgba(0,0,0,0.06), 0 1px 0 rgba(65,205,82,0.10)",
+      }}>
         {/* 状态过滤 */}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {statusFilters.map((s) => {
@@ -364,6 +506,33 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                     onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(65,205,82,0.1)")}
                   >
                     查看报告
+                  </button>
+                )}
+                {/* 重跑按钮 */}
+                {(result.status === "failed" || result.status === "timeout" || result.status === "crash") &&
+                  session.status !== "running" && (
+                  <button
+                    onClick={() => handleRerun(result.id, newHapPath || undefined)}
+                    disabled={!!rerunningId}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 5,
+                      padding: "4px 10px", borderRadius: 8, fontSize: 11, fontWeight: 600,
+                      border: "none", cursor: rerunningId ? "not-allowed" : "pointer", flexShrink: 0,
+                      background: rerunningId === result.id ? "rgba(99,102,241,0.18)" : "rgba(99,102,241,0.1)",
+                      color: "#6366f1", opacity: rerunningId && rerunningId !== result.id ? 0.5 : 1,
+                      transition: "background 0.15s",
+                    }}
+                    onMouseEnter={(e) => { if (!rerunningId) e.currentTarget.style.background = "rgba(99,102,241,0.2)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = rerunningId === result.id ? "rgba(99,102,241,0.18)" : "rgba(99,102,241,0.1)"; }}
+                  >
+                    {rerunningId === result.id ? (
+                      <>
+                        <svg style={{ animation: "spin 1s linear infinite" }} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        重跑中
+                      </>
+                    ) : "重跑"}
                   </button>
                 )}
               </div>
