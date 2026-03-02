@@ -12,20 +12,23 @@ import {
   killProcess,
   getFaultLogs,
   parseCrashLogs,
-  downloadFaultLog,
-  downloadTestReport,
+  downloadFaultLogContent,
+  downloadTestReportContent,
   installHap,
 } from "./hdc";
 import { parseXmlReport } from "./xml-report";
 import { parseHap, filterTestLibs, type TestLib } from "./hap-parser";
 import {
+  getSession,
   upsertSession,
   updateTestResult,
   computeSummary,
+  stripSessionContent,
+  type CrashLog,
   type TestSession,
   type TestResult,
 } from "./store";
-import { FAULTLOG_DIR, REPORTS_BASE_DIR, LOGS_DIR } from "./paths";
+import { LOGS_DIR } from "./paths";
 
 /** 全局存储运行中会话的日志回调，用于 SSE 推送 */
 const sessionLogHandlers = new Map<string, ((line: string) => void)[]>();
@@ -115,8 +118,8 @@ export async function startTestSession(options: RunOptions): Promise<string> {
     skipInstall = false,
   } = options;
 
-  // 确保 Faultlogger 目录存在
-  if (!fs.existsSync(FAULTLOG_DIR)) fs.mkdirSync(FAULTLOG_DIR, { recursive: true });
+  // 确保日志目录存在（JSONL 日志）
+  if (!fs.existsSync(LOGS_DIR)) fs.mkdirSync(LOGS_DIR, { recursive: true });
 
   const session: TestSession = {
     id: sessionId,
@@ -133,17 +136,17 @@ export async function startTestSession(options: RunOptions): Promise<string> {
     startTime: new Date().toISOString(),
     results: [],
   };
-  upsertSession(session);
+  await upsertSession(session);
   sessionStopFlags.set(sessionId, false);
   sessionMeta.set(sessionId, { deviceId, packageName });
 
   // 异步执行，不阻塞 API 返回
   runSession(sessionId, session, hapFilePath, architectures, skipInstall).catch(
-    (e) => {
+    async (e) => {
       emit(sessionId, `[ERROR] 会话异常终止: ${e?.message || e}`);
       session.status = "stopped";
       session.endTime = new Date().toISOString();
-      upsertSession(session);
+      await upsertSession(session);
     }
   );
 
@@ -172,7 +175,7 @@ async function runSession(
       emit(sessionId, `[ERROR] 安装失败: ${message}`);
       session.status = "stopped";
       session.endTime = new Date().toISOString();
-      upsertSession(session);
+      await upsertSession(session);
       return;
     }
     emit(sessionId, `[INFO] 安装成功: ${message}`);
@@ -191,7 +194,7 @@ async function runSession(
     emit(sessionId, `[ERROR] HAP 解析失败: ${err?.message}`);
     session.status = "stopped";
     session.endTime = new Date().toISOString();
-    upsertSession(session);
+    await upsertSession(session);
     return;
   }
 
@@ -214,7 +217,7 @@ async function runSession(
     module: lib.module,
     status: "pending" as const,
   }));
-  upsertSession(session);
+  await upsertSession(session);
 
   // 4. 记录初始崩溃日志，用于后续对比
   const knownCrashLogs = new Set<string>(
@@ -236,7 +239,7 @@ async function runSession(
     emit(sessionId, `[INFO] [${i + 1}/${libs.length}] 运行: ${lib.path} (${lib.arch})`);
     result.status = "running";
     result.startTime = new Date().toISOString();
-    updateTestResult(sessionId, result.id, {
+    await updateTestResult(sessionId, result.id, {
       status: "running",
       startTime: result.startTime,
     });
@@ -281,7 +284,7 @@ async function runSession(
     const newCrashes = currentCrashLogs.filter((c) => !knownCrashLogs.has(c));
 
     let finalStatus: TestResult["status"] = testStatus;
-    const crashLogFiles: string[] = [];
+    const crashLogFiles: CrashLog[] = [];
 
     if (newCrashes.length > 0) {
       finalStatus = "crash";
@@ -289,9 +292,9 @@ async function runSession(
       for (const crashLog of newCrashes) {
         emit(sessionId, `[CRASH] ${crashLog}`);
         knownCrashLogs.add(crashLog);
-        crashLogFiles.push(crashLog);
-        const ok = await downloadFaultLog(deviceId, crashLog, FAULTLOG_DIR);
-        emit(sessionId, ok ? `[INFO] 已下载崩溃日志: ${crashLog}` : `[WARN] 下载失败: ${crashLog}`);
+        const content = await downloadFaultLogContent(deviceId, crashLog);
+        crashLogFiles.push({ name: crashLog, content: content ?? "" });
+        emit(sessionId, content ? `[INFO] 已下载崩溃日志: ${crashLog}` : `[WARN] 下载失败: ${crashLog}`);
       }
     }
 
@@ -300,18 +303,17 @@ async function runSession(
     result.crashLogs = crashLogFiles;
 
     // 下载并解析 XML 测试报告
-    const sessionReportDir = path.join(REPORTS_BASE_DIR, sessionId);
-    const xmlLocalPath = await downloadTestReport(deviceId, packageName, lib.path, sessionReportDir, (cmd) => {
+    const xmlContent = await downloadTestReportContent(deviceId, packageName, lib.path, (cmd) => {
       emit(sessionId, `[CMD] ${cmd}`);
     });
 
     let reportFile: string | undefined;
-    if (xmlLocalPath) {
-      // reportFile 存相对路径（相对 sessionReportDir）
-      reportFile = path.relative(sessionReportDir, xmlLocalPath);
+    let reportContent: string | undefined;
+    if (xmlContent) {
+      reportFile = lib.path.replace(/\.so$/, ".xml");
+      reportContent = xmlContent;
       emit(sessionId, `[INFO] XML 报告已下载: ${reportFile}`);
       try {
-        const xmlContent = fs.readFileSync(xmlLocalPath, "utf-8");
         const xmlResult = parseXmlReport(xmlContent);
         // 测试函数有任何失败则覆盖状态为 failed（崩溃优先级更高）
         if (finalStatus !== "crash" && finalStatus !== "timeout") {
@@ -340,12 +342,14 @@ async function runSession(
     result.endTime = new Date().toISOString();
     result.crashLogs = crashLogFiles;
     result.reportFile = reportFile;
+    result.reportContent = reportContent;
 
-    updateTestResult(sessionId, result.id, {
+    await updateTestResult(sessionId, result.id, {
       status: finalStatus,
       endTime: result.endTime,
       crashLogs: crashLogFiles,
       reportFile,
+      reportContent,
     });
 
     emit(
@@ -355,20 +359,20 @@ async function runSession(
   }
 
   // 6. 汇总
-  const sessions = (await import("./store")).loadSessions();
-  const finalSession = sessions.find((s) => s.id === sessionId);
+  const finalSession = await getSession(sessionId);
   if (finalSession) {
     finalSession.status = sessionStopFlags.get(sessionId) ? "stopped" : "completed";
     finalSession.endTime = new Date().toISOString();
     finalSession.summary = computeSummary(finalSession.results);
-    upsertSession(finalSession);
+    await upsertSession(finalSession);
     const s = finalSession.summary;
     emit(sessionId, `[DONE] 测试完成！总计:${s.total} 成功:${s.success} 超时:${s.timeout} 崩溃:${s.crash} 失败:${s.failed}`);
   }
 
-  sessionLogHandlers.delete(sessionId);
   sessionStopFlags.delete(sessionId);
   sessionMeta.delete(sessionId);
+  // 注意：不删除 sessionLogHandlers 中的条目，SSE stream 的 handler 通过各自的 abort 回调各自清理
+  // 若此处整体 delete，重跑时 __status__ 推送会找不到任何 handler 导致前端无法感知完成
 }
 
 // ─────────────────────────────────────────────
@@ -395,7 +399,7 @@ export async function rerunSingleTest(
   resultId: string,
   options: RerunOptions = {}
 ): Promise<void> {
-  const session = (await import("./store")).getSession(sessionId);
+  const session = await getSession(sessionId);
   if (!session) throw new Error(`会话不存在: ${sessionId}`);
   if (session.status === "running") throw new Error("会话正在运行中，无法重跑单条测试");
 
@@ -414,7 +418,7 @@ export async function rerunSingleTest(
 
   // 如果指定了新的 HAP 路径，更新会话记录
   if (options.hapFilePath && options.hapFilePath !== session.hapFilePath) {
-    (await import("./store")).upsertSession({
+    await upsertSession({
       ...session,
       hapFilePath: options.hapFilePath,
       hapFile: path.basename(options.hapFilePath),
@@ -422,26 +426,32 @@ export async function rerunSingleTest(
   }
 
   // 将该条目标记为 running，推送状态更新
-  const store = await import("./store");
   const rerunId = `${sessionId}:rerun:${resultId}`;
   sessionStopFlags.set(rerunId, false);
 
   // 立即告知前端该条目开始运行
-  updateTestResult(sessionId, resultId, { status: "running", startTime: new Date().toISOString() });
-  const updatedSession = store.getSession(sessionId)!;
+  await updateTestResult(sessionId, resultId, { status: "running", startTime: new Date().toISOString() });
+  const updatedSession = (await getSession(sessionId))!;
   const handlers = sessionLogHandlers.get(sessionId) ?? [];
   for (const h of handlers) {
-    // 推送 status 事件让 SSE 客户端刷新
-    h(`__status__:${JSON.stringify(updatedSession)}`);
+    // 推送 status 事件让 SSE 客户端刷新（剥离大字段，不传 reportContent/crashLog 内容）
+    h(`__status__:${JSON.stringify(stripSessionContent(updatedSession))}`);
   }
 
   // 异步执行
   _rerunSingleTestAsync(sessionId, resultId, rerunId, {
     hapFilePath, deviceId, timeout, packageName, abilityName, skipInstall,
     lib: { arch: result.arch, path: result.path, name: result.name, module: result.module },
-  }).catch((e) => {
+  }).catch(async (e) => {
     emit(sessionId, `[ERROR] 重跑异常: ${e?.message || e}`);
-    updateTestResult(sessionId, resultId, { status: "failed", endTime: new Date().toISOString() });
+    await updateTestResult(sessionId, resultId, { status: "failed", endTime: new Date().toISOString() });
+    // 推送最终状态，让前端恢复按鈕
+    const errSession = await getSession(sessionId);
+    if (errSession) {
+      const handlers = sessionLogHandlers.get(sessionId) ?? [];
+      for (const h of handlers) h(`__status__:${JSON.stringify(stripSessionContent(errSession))}`);
+    }
+    sessionStopFlags.delete(rerunId);
   });
 }
 
@@ -471,13 +481,12 @@ async function _rerunSingleTestAsync(
     });
     if (!success) {
       emit(sessionId, `[ERROR] 安装失败: ${message}`);
-      updateTestResult(sessionId, resultId, { status: "failed", endTime: new Date().toISOString() });
+      await updateTestResult(sessionId, resultId, { status: "failed", endTime: new Date().toISOString() });
       sessionStopFlags.delete(rerunId);
       return;
     }
     emit(sessionId, `[INFO] 安装成功`);
   }
-
   // 记录已有崩溃日志
   const knownCrashLogs = new Set<string>(
     parseCrashLogs(await getFaultLogs(deviceId), packageName)
@@ -513,31 +522,30 @@ async function _rerunSingleTestAsync(
   const currentCrashLogs = parseCrashLogs(await getFaultLogs(deviceId), packageName);
   const newCrashes = currentCrashLogs.filter((c) => !knownCrashLogs.has(c));
   let finalStatus: TestResult["status"] = testStatus;
-  const crashLogFiles: string[] = [];
+  const crashLogFiles: CrashLog[] = [];
 
   if (newCrashes.length > 0) {
     finalStatus = "crash";
     emit(sessionId, `[WARN] 检测到 ${newCrashes.length} 条新崩溃日志`);
     for (const crashLog of newCrashes) {
       emit(sessionId, `[CRASH] ${crashLog}`);
-      crashLogFiles.push(crashLog);
-      const ok = await downloadFaultLog(deviceId, crashLog, FAULTLOG_DIR);
-      emit(sessionId, ok ? `[INFO] 已下载崩溃日志: ${crashLog}` : `[WARN] 下载失败: ${crashLog}`);
+      crashLogFiles.push({ name: crashLog, content: (await downloadFaultLogContent(deviceId, crashLog)) ?? "" });
+      emit(sessionId, `[INFO] 已下载崩溃日志: ${crashLog}`);
     }
   }
 
   // 下载并解析 XML 报告
-  const sessionReportDir = path.join(REPORTS_BASE_DIR, sessionId);
-  const xmlLocalPath = await downloadTestReport(deviceId, packageName, lib.path, sessionReportDir, (cmd) => {
+  const xmlContent = await downloadTestReportContent(deviceId, packageName, lib.path, (cmd) => {
     emit(sessionId, `[CMD] ${cmd}`);
   });
 
   let reportFile: string | undefined;
-  if (xmlLocalPath) {
-    reportFile = path.relative(sessionReportDir, xmlLocalPath);
+  let reportContent: string | undefined;
+  if (xmlContent) {
+    reportFile = lib.path.replace(/\.so$/, ".xml");
+    reportContent = xmlContent;
     emit(sessionId, `[INFO] XML 报告已下载: ${reportFile}`);
     try {
-      const xmlContent = fs.readFileSync(xmlLocalPath, "utf-8");
       const xmlResult = parseXmlReport(xmlContent);
       if (finalStatus !== "crash" && finalStatus !== "timeout") {
         finalStatus = xmlResult.passed ? "success" : "failed";
@@ -559,25 +567,25 @@ async function _rerunSingleTestAsync(
     }
   }
 
-  updateTestResult(sessionId, resultId, {
+  await updateTestResult(sessionId, resultId, {
     status: finalStatus,
     endTime: new Date().toISOString(),
     crashLogs: crashLogFiles,
     reportFile,
+    reportContent,
   });
 
   emit(sessionId, `[RESULT] ${lib.name}: ${finalStatus.toUpperCase()} (重跑完成)`);
 
   // 重新计算 summary
-  const store = await import("./store");
-  const finalSession = store.getSession(sessionId);
-  if (finalSession) {
-    finalSession.summary = computeSummary(finalSession.results);
-    upsertSession(finalSession);
+  const finalSession2 = await getSession(sessionId);
+  if (finalSession2) {
+    finalSession2.summary = computeSummary(finalSession2.results);
+    await upsertSession(finalSession2);
     // 通知前端刷新
     const handlers = sessionLogHandlers.get(sessionId) ?? [];
     for (const h of handlers) {
-      h(`__status__:${JSON.stringify(finalSession)}`);
+      h(`__status__:${JSON.stringify(finalSession2)}`);
     }
   }
 

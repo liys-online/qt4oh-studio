@@ -95,8 +95,9 @@ export default function TestsPage() {
   }, []);
 
   // 有运行中的会话时每 3s 刷新一次列表以更新进度
+  // 用 hasRunning 而非 sessions 作为依赖，避免每次 poll 后重建 interval
+  const hasRunning = sessions.some((s) => s.status === "running");
   useEffect(() => {
-    const hasRunning = sessions.some((s) => s.status === "running");
     if (!hasRunning) return;
     const timer = setInterval(() => {
       fetch("/api/tests")
@@ -104,7 +105,7 @@ export default function TestsPage() {
         .then((d) => setSessions(d.sessions || []));
     }, 3000);
     return () => clearInterval(timer);
-  }, [sessions]);
+  }, [hasRunning]);
 
   // 设备列表就绪后若只有一台则自动选中
   useEffect(() => {

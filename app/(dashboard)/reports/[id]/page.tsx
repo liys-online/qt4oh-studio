@@ -12,7 +12,7 @@ interface TestResult {
   path: string;
   status: "success" | "timeout" | "crash" | "failed" | "pending" | "running";
   duration?: number;
-  crashLogs?: string[];
+  crashLogs?: { name: string; content: string }[];
   reportFile?: string;
 }
 
@@ -21,6 +21,7 @@ interface XmlFunction {
   type: string;
   message?: string;
   dataTags: string[];
+  descriptions: string[];
   durationMs?: number;
   hasFailed: boolean;
 }
@@ -32,7 +33,6 @@ interface XmlReport {
   functions: XmlFunction[];
   passed: boolean;
 }
-
 interface Summary {
   total: number;
   success: number;
@@ -73,13 +73,16 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
   const [session, setSession] = useState<Session | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterModule, setFilterModule] = useState<string>("all");
-  const [selectedCrash, setSelectedCrash] = useState<string | null>(null);
-  const [crashContent, setCrashContent] = useState("");
+  const [selectedCrash, setSelectedCrash] = useState<{ name: string; content: string } | null>(null);
   const [crashLoading, setCrashLoading] = useState(false);
-  const [selectedReport, setSelectedReport] = useState<{ resultId: string; sessionId: string; file: string } | null>(null);
+  const [selectedReport, setSelectedReport] = useState<{ resultId: string; sessionId: string; reportFile?: string } | null>(null);
   const [xmlReport, setXmlReport] = useState<XmlReport | null>(null);
   const [xmlLoading, setXmlLoading] = useState(false);
   const [xmlError, setXmlError] = useState<string | null>(null);
+  const [xmlRawContent, setXmlRawContent] = useState<string | null>(null);
+  const [xmlTab, setXmlTab] = useState<"visual" | "raw">("visual");
+  const [xmlLockedHeight, setXmlLockedHeight] = useState<number | null>(null);
+  const xmlDialogRef = useRef<HTMLDivElement>(null);
   // 重跑相关
   const [rerunningId, setRerunningId] = useState<string | null>(null);
   const [showChangeHap, setShowChangeHap] = useState(false);
@@ -92,7 +95,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
       .then((d) => setSession(d.session));
   }, [id]);
 
-  // SSE：接收重跑推送的实时状态更新
+  // SSE：接收重跑推送的实时状态更新（快路径）
   useEffect(() => {
     const es = new EventSource(`/api/tests/${id}/stream`);
     es.onmessage = (e) => {
@@ -106,6 +109,23 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
     es.onerror = () => es.close();
     return () => es.close();
   }, [id]);
+
+  // 轮询兜底：重跑期间每 2s 检查结果状态，防止 SSE 丢失事件导致按钮永久禁用
+  useEffect(() => {
+    if (!rerunningId) return;
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/tests/${id}`);
+        const data = await res.json();
+        const results = (data.session?.results ?? []) as { id: string; status: string }[];
+        const target = results.find((r) => r.id === rerunningId);
+        if (!target || (target.status !== "running" && target.status !== "pending")) {
+          setRerunningId(null);
+        }
+      } catch { /* 忽略网络错误 */ }
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [rerunningId, id]);
 
   const handleRerun = async (resultId: string, hapFilePath?: string) => {
     if (rerunningId) return;
@@ -142,36 +162,71 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
     }
   };
 
-  const openCrash = async (filename: string) => {
-    setSelectedCrash(filename);
-    setCrashLoading(true);
-    setCrashContent("");
-    const res = await fetch(`/api/reports/crash/${filename}`);
-    const data = await res.json();
-    setCrashContent(data.content || data.error || "");
-    setCrashLoading(false);
+  const openCrash = async (log: { name: string; content: string }) => {
+    // 先显示弹窗（内容为空时显示加载状态）
+    setSelectedCrash({ name: log.name, content: log.content });
+    if (!log.content) {
+      setCrashLoading(true);
+      try {
+        const res = await fetch(`/api/reports/crash/${encodeURIComponent(log.name)}`);
+        const data = await res.json();
+        setSelectedCrash({ name: log.name, content: data.content || data.error || "" });
+      } catch (e) {
+        setSelectedCrash({ name: log.name, content: `加载失败: ${(e as Error).message}` });
+      } finally {
+        setCrashLoading(false);
+      }
+    }
   };
 
   const openReport = async (result: TestResult) => {
-    if (!result.reportFile || !session) return;
-    setSelectedReport({ resultId: result.id, sessionId: session.id, file: result.reportFile });
+    if (!result.reportFile) return;
+    setSelectedReport({ resultId: result.id, sessionId: id, reportFile: result.reportFile });
     setXmlReport(null);
+    setXmlRawContent(null);
     setXmlError(null);
+    setXmlTab("visual");
+    setXmlLockedHeight(null);
     setXmlLoading(true);
-    const urlPath = result.reportFile.replace(/\\/g, "/");
-    const url = `/api/reports/xml/${session.id}/${urlPath}`;
     try {
-      const res = await fetch(url);
+      const res = await fetch(`/api/reports/xml/${id}/${result.id}`);
       const data = await res.json();
-      if (res.ok) {
-        setXmlReport(data);
-      } else {
-        setXmlError(data.error ?? `HTTP ${res.status}`);
-      }
+      if (res.ok) setXmlReport(data as XmlReport);
+      else setXmlError(data.error ?? `HTTP ${res.status}`);
     } catch (e) {
       setXmlError((e as Error).message);
     } finally {
       setXmlLoading(false);
+    }
+  };
+
+  const loadXmlRaw = async () => {
+    if (xmlRawContent !== null || !selectedReport) return;
+    try {
+      const res = await fetch(`/api/reports/xml/${selectedReport.sessionId}/${selectedReport.resultId}?raw=1`);
+      if (res.ok) setXmlRawContent(await res.text());
+      else setXmlRawContent(`加载失败: HTTP ${res.status}`);
+    } catch (e) {
+      setXmlRawContent(`加载失败: ${(e as Error).message}`);
+    }
+  };
+
+  const downloadXml = () => {
+    if (!selectedReport) return;
+    const filename = selectedReport.reportFile
+      ? selectedReport.reportFile.split(/[\\/]/).pop() ?? "report.xml"
+      : "report.xml";
+    if (xmlRawContent) {
+      const blob = new Blob([xmlRawContent], { type: "application/xml" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      // 直接跳转 API，让浏览器下载
+      const a = document.createElement("a");
+      a.href = `/api/reports/xml/${selectedReport.sessionId}/${selectedReport.resultId}?raw=1`;
+      a.download = filename; a.click();
     }
   };
 
@@ -474,10 +529,10 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                 {/* 崩溃日志按钮 */}
                 {result.crashLogs && result.crashLogs.length > 0 && (
                   <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                    {result.crashLogs.map((f) => (
+                    {result.crashLogs.map((log) => (
                       <button
-                        key={f}
-                        onClick={() => openCrash(f)}
+                        key={log.name}
+                        onClick={() => openCrash(log)}
                         style={{
                           padding: "4px 10px", borderRadius: 8, fontSize: 11, fontWeight: 600,
                           border: "none", cursor: "pointer",
@@ -558,7 +613,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
             display: "flex", flexDirection: "column", overflow: "hidden",
           }}>
             <div style={{ padding: "16px 24px", borderBottom: "1px solid rgba(0,0,0,0.06)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontFamily: "monospace", fontSize: 13, color: "#1e1b4b", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedCrash}</span>
+              <span style={{ fontFamily: "monospace", fontSize: 13, color: "#1e1b4b", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedCrash.name}</span>
               <button
                 onClick={() => setSelectedCrash(null)}
                 style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 20, lineHeight: 1, padding: "0 4px", flexShrink: 0 }}
@@ -576,7 +631,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                   fontFamily: "monospace", overflowX: "auto",
                   whiteSpace: "pre-wrap", margin: 0,
                 }}>
-                  {crashContent || "（文件为空）"}
+                  {selectedCrash?.content || "（内容为空）"}
                 </pre>
               )}
             </div>
@@ -584,7 +639,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
         </div>
       )}
 
-      {/* XML 报告可视化 Modal（原生实现，避免 HeroUI portal 问题） */}
+      {/* XML 报告可视化 Modal */}
       {!!selectedReport && (
         <div
           style={{
@@ -595,33 +650,96 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
           }}
           onClick={(e) => { if (e.target === e.currentTarget) { setSelectedReport(null); setXmlReport(null); } }}
         >
-          <div style={{
+          <div ref={xmlDialogRef} style={{
             background: "#fff", borderRadius: 20, boxShadow: "0 24px 80px rgba(0,0,0,0.18)",
-            width: "100%", maxWidth: 800, maxHeight: "85vh",
+            width: "100%", maxWidth: 800,
+            ...(xmlLockedHeight ? { height: xmlLockedHeight } : { maxHeight: "85vh" }),
             display: "flex", flexDirection: "column", overflow: "hidden",
           }}>
             {/* Header */}
-            <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid rgba(0,0,0,0.06)", flexShrink: 0 }}>
-              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: "#1d252c" }}>
-                    {xmlReport?.testCaseName ?? selectedReport?.file ?? "测试报告"}
+            <div style={{ padding: "16px 24px 0", borderBottom: "1px solid rgba(0,0,0,0.06)", flexShrink: 0 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "#1d252c", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {xmlReport?.testCaseName ?? "测试报告"}
                   </div>
                   {xmlReport?.qtVersion && (
                     <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 3 }}>Qt {xmlReport.qtVersion}</div>
                   )}
                 </div>
-                <button
-                  onClick={() => { setSelectedReport(null); setXmlReport(null); }}
-                  style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "#94a3b8", lineHeight: 1, padding: "2px 6px" }}
-                >
-                  ×
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, marginLeft: 12 }}>
+                  {/* 下载按鈕 */}
+                  <button
+                    onClick={downloadXml}
+                    title="下载 XML 原件"
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 5,
+                      padding: "5px 11px", borderRadius: 8, fontSize: 11, fontWeight: 600,
+                      border: "1px solid rgba(65,205,82,0.3)", cursor: "pointer",
+                      background: "rgba(65,205,82,0.08)", color: "#1d7a2e",
+                    }}
+                  >
+                    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    下载 XML
+                  </button>
+                  <button
+                    onClick={() => { setSelectedReport(null); setXmlReport(null); }}
+                    style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "#94a3b8", lineHeight: 1, padding: "2px 6px" }}
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+              {/* Tab 切换 */}
+              <div style={{ display: "flex", gap: 0 }}>
+                {(["visual", "raw"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => {
+                      if (tab === "raw") {
+                        // 切到原件前先快照当前高度并锁定
+                        if (xmlDialogRef.current) {
+                          setXmlLockedHeight(xmlDialogRef.current.offsetHeight);
+                        }
+                        loadXmlRaw();
+                      } else {
+                        // 切回可视化，释放高度锁定
+                        setXmlLockedHeight(null);
+                      }
+                      setXmlTab(tab);
+                    }}
+                    style={{
+                      padding: "7px 16px", fontSize: 12, fontWeight: 600,
+                      border: "none", background: "none", cursor: "pointer",
+                      borderBottom: xmlTab === tab ? "2px solid #41CD52" : "2px solid transparent",
+                      color: xmlTab === tab ? "#1d7a2e" : "#94a3b8",
+                      transition: "color 0.15s",
+                    }}
+                  >
+                    {tab === "visual" ? "📊 可视化" : "📄 XML 原件"}
+                  </button>
+                ))}
               </div>
             </div>
             {/* Body */}
             <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px 24px" }}>
-            {xmlLoading ? (
+            {xmlTab === "raw" ? (
+              xmlRawContent === null ? (
+                <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 320, padding: "32px 0" }}>
+                  <Spinner label="加载中..." />
+                </div>
+              ) : (
+                <pre style={{
+                  background: "#0f172a", color: "#94a3b8",
+                  borderRadius: 12, padding: 16, fontSize: 11,
+                  fontFamily: "monospace", overflowX: "auto",
+                  whiteSpace: "pre", margin: 0, lineHeight: 1.6,
+                  minHeight: 320,
+                }}>{xmlRawContent}</pre>
+              )
+            ) : xmlLoading ? (
               <div style={{ display: "flex", justifyContent: "center", padding: "32px 0" }}>
                 <Spinner label="解析中..." />
               </div>
@@ -630,7 +748,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                 <p style={{ color: "#dc2626", fontSize: 13, fontWeight: 600, marginBottom: 8 }}>报告加载失败</p>
                 <p style={{ color: "#94a3b8", fontSize: 12, fontFamily: "monospace" }}>{xmlError}</p>
                 <p style={{ color: "#cbd5e1", fontSize: 11, marginTop: 8 }}>
-                  {`/api/reports/xml/${selectedReport?.sessionId}/${selectedReport?.file?.replace(/\\/g, "/")}`}
+                  result #{selectedReport?.resultId?.slice(0, 8)}
                 </p>
               </div>
             ) : !xmlReport ? (
@@ -700,11 +818,11 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                           <td style={{ padding: "8px 12px", textAlign: "right", color: "#94a3b8", fontVariantNumeric: "tabular-nums" }}>
                             {fn.durationMs != null ? `${fn.durationMs.toFixed(1)}ms` : "-"}
                           </td>
-                          <td style={{ padding: "8px 12px", color: "#64748b", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <td style={{ padding: "8px 12px", color: "#64748b", maxWidth: 300 }}>
                             {fn.message ? (
-                              <span title={fn.message} style={{ fontFamily: "monospace", fontSize: 11 }}>{fn.message.slice(0, 120)}</span>
-                            ) : fn.dataTags.length > 0 ? (
-                              <span style={{ color: "#94a3b8", fontSize: 11 }}>{fn.dataTags.slice(0, 2).join(", ")}{fn.dataTags.length > 2 ? ` +${fn.dataTags.length - 2}` : ""}</span>
+                              <span title={fn.message} style={{ fontFamily: "monospace", fontSize: 11, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fn.message}</span>
+                            ) : fn.descriptions.length > 0 ? (
+                              <span style={{ color: "#94a3b8", fontSize: 11, display: "block", wordBreak: "break-word", whiteSpace: "pre-wrap", lineHeight: 1.4 }}>{fn.descriptions.join("\n")}</span>
                             ) : null}
                           </td>
                         </tr>

@@ -1,13 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as path from "path";
 import { startTestSession } from "@/lib/test-runner";
-import { loadSessions, deleteAllSessions } from "@/lib/store";
+import { loadSessionsSummary, deleteAllSessions } from "@/lib/store";
 import { UPLOAD_DIR } from "@/lib/paths";
 
-/** GET /api/tests - 获取所有测试会话列表 */
+/** GET /api/tests - 获取所有测试会话列表（轻量化：不含大字段，不含已完成会话的 results） */
 export async function GET() {
-  const sessions = loadSessions();
-  return NextResponse.json({ sessions });
+  const sessions = await loadSessionsSummary();
+  // 有 summary 的会话（已完成/已停止），前端用 summary 计算进度，不需要 results 数组
+  // 运行中的会话返回精简的 results（只有 status），供进度条使用
+  const lean = sessions.map((s) => ({
+    ...s,
+    results: s.summary
+      ? []
+      : s.results.map((r) => ({ id: r.id, status: r.status })),
+  }));
+  return NextResponse.json({ sessions: lean });
 }
 
 /**
@@ -15,7 +23,7 @@ export async function GET() {
  * 批量删除所有非运行中的会话
  */
 export async function DELETE() {
-  const count = deleteAllSessions();
+  const count = await deleteAllSessions();
   return NextResponse.json({ ok: true, deleted: count });
 }
 

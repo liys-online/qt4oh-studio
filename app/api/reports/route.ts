@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
-import * as fs from "fs";
-import { loadSessions, computeSummary } from "@/lib/store";
-import { FAULTLOG_DIR } from "@/lib/paths";
+import { loadSessionsSummary, computeSummary } from "@/lib/store";
 
 /** GET /api/reports - 汇总所有会话的统计报告 */
 export async function GET() {
-  const sessions = loadSessions();
+  const sessions = await loadSessionsSummary();
 
   const overview = {
     totalSessions: sessions.length,
@@ -27,11 +25,27 @@ export async function GET() {
     overview.totalCrash += summary.crash;
   }
 
-  // 崩溃日志文件列表
-  let crashFiles: string[] = [];
-  if (fs.existsSync(FAULTLOG_DIR)) {
-    crashFiles = fs.readdirSync(FAULTLOG_DIR);
+  // 崩溃日志文件名列表（从 DB 自动聚合，去重）
+  const crashFileSet = new Set<string>();
+  for (const s of sessions) {
+    for (const r of s.results) {
+      for (const log of r.crashLogs ?? []) {
+        crashFileSet.add(log.name);
+      }
+    }
   }
+  const crashFiles = [...crashFileSet];
 
-  return NextResponse.json({ overview, sessions, crashFiles });
+  // 列表页只需会话元数据，不需要 results 数组
+  const sessionList = sessions.map((s) => ({
+    id: s.id,
+    hapFile: s.hapFile,
+    deviceId: s.deviceId,
+    status: s.status,
+    startTime: s.startTime,
+    endTime: s.endTime,
+    summary: s.summary,
+  }));
+
+  return NextResponse.json({ overview, sessions: sessionList, crashFiles });
 }

@@ -6,7 +6,7 @@ export async function register() {
   // 只在 Node.js 运行时执行（排除 Edge Runtime）
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const { resetRunningSessions } = await import("@/lib/store");
-    resetRunningSessions();
+    await resetRunningSessions();
     console.log("[startup] resetRunningSessions done");
   }
 }

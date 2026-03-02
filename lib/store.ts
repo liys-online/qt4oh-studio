@@ -1,13 +1,24 @@
 /**
  * 测试运行状态与报告的持久化存储
- * 使用 JSON 文件存储在 data/ 目录下（本地运行）
+ * 通过 Knex 支持 SQLite / MySQL / PostgreSQL
+ *
+ * 切换数据库：设置环境变量
+ *   DATABASE_PROVIDER=sqlite       (默认)
+ *   DATABASE_PROVIDER=mysql        + DATABASE_URL=mysql://...
+ *   DATABASE_PROVIDER=postgresql   + DATABASE_URL=postgresql://...
  */
 
-import * as fs from "fs";
-import * as path from "path";
-import { APP_DATA_DIR, SESSIONS_FILE, FAULTLOG_DIR, REPORTS_BASE_DIR } from "./paths";
+import { getDb, ensureMigrated } from "./db";
 
 export type TestStatus = "pending" | "running" | "success" | "timeout" | "crash" | "failed";
+
+/** 单条崩溃日志（文件名 + 原始内容，存入数据库，不落盘） */
+export interface CrashLog {
+  /** 日志文件名，含时间戳，如 cppcrash-com.xxx-20260301043829 */
+  name: string;
+  /** 日志文件原始文本内容 */
+  content: string;
+}
 
 export interface TestResult {
   id: string;
@@ -19,10 +30,12 @@ export interface TestResult {
   status: TestStatus;
   startTime?: string;
   endTime?: string;
-  /** 崩溃日志文件名列表 */
-  crashLogs?: string[];
-  /** 测试结果 XML 报告相对路径（相对于 sessionReportDir） */
+  /** 崩溃日志列表（含内容，存入数据库，不落本地磁盘） */
+  crashLogs?: CrashLog[];
+  /** XML 报告展示标签（相对路径）；实际内容见 reportContent */
   reportFile?: string;
+  /** XML 报告原始内容（存入数据库，不落本地磁盘） */
+  reportContent?: string;
   output?: string;
 }
 
@@ -51,140 +64,284 @@ export interface TestSession {
   };
 }
 
-function ensureDataDir() {
-  if (!fs.existsSync(APP_DATA_DIR)) fs.mkdirSync(APP_DATA_DIR, { recursive: true });
+// ─── 行内类型转换工具 ────────────────────────────────────────────────────────
+
+type DbSession = {
+  id: string;
+  device_id: string;
+  hap_file: string;
+  hap_file_path: string | null;
+  package_name: string;
+  ability_name: string;
+  filter_arch: string | null;
+  filter_module: string | null;
+  filter_pattern: string | null;
+  timeout: number;
+  status: string;
+  start_time: string;
+  end_time: string | null;
+  summary: string | null;
+};
+
+type DbResult = {
+  id: string;
+  session_id: string;
+  arch: string;
+  path: string;
+  name: string;
+  module: string;
+  status: string;
+  start_time: string | null;
+  end_time: string | null;
+  crash_logs: string | null;
+  report_file: string | null;
+  report_content: string | null;
+  output: string | null;
+  sort_order: number;
+};
+
+function rowToResult(r: DbResult): TestResult {
+  return {
+    id: r.id,
+    arch: r.arch,
+    path: r.path,
+    name: r.name,
+    module: r.module,
+    status: r.status as TestStatus,
+    startTime: r.start_time ?? undefined,
+    endTime: r.end_time ?? undefined,
+    crashLogs: r.crash_logs ? JSON.parse(r.crash_logs) as CrashLog[] : undefined,
+    reportFile: r.report_file ?? undefined,
+    reportContent: r.report_content ?? undefined,
+    output: r.output ?? undefined,
+  };
 }
 
-export function loadSessions(): TestSession[] {
-  ensureDataDir();
-  if (!fs.existsSync(SESSIONS_FILE)) return [];
-  try {
-    return JSON.parse(fs.readFileSync(SESSIONS_FILE, "utf-8"));
-  } catch {
-    return [];
+function rowToSession(s: DbSession, results: TestResult[]): TestSession {
+  return {
+    id: s.id,
+    deviceId: s.device_id,
+    hapFile: s.hap_file,
+    hapFilePath: s.hap_file_path ?? undefined,
+    packageName: s.package_name,
+    abilityName: s.ability_name,
+    filterArch: s.filter_arch ?? undefined,
+    filterModule: s.filter_module ? JSON.parse(s.filter_module) : undefined,
+    filterPattern: s.filter_pattern ?? undefined,
+    timeout: s.timeout,
+    status: s.status as TestSession["status"],
+    startTime: s.start_time,
+    endTime: s.end_time ?? undefined,
+    results,
+    summary: s.summary ? JSON.parse(s.summary) : undefined,
+  };
+}
+
+// ─── 轻量化工具（剥离大字段，用于 SSE 传输）──────────────────────────────────
+
+/**
+ * 去掉 reportContent 和 crashLogs[].content，仅保留元数据。
+ * 用于 SSE/GET API 传输，避免将 XML 内容和崩溃日志内容反复发给前端。
+ * 实际内容通过专用 API 按需拉取。
+ */
+export function stripSessionContent(session: TestSession): TestSession {
+  return {
+    ...session,
+    results: session.results.map((r) => ({
+      ...r,
+      reportContent: undefined,
+      crashLogs: r.crashLogs?.map((l) => ({ name: l.name, content: "" })),
+    })),
+  };
+}
+
+// ─── 公开 API ────────────────────────────────────────────────────────────────
+
+export async function loadSessions(): Promise<TestSession[]> {
+  await ensureMigrated();
+  const db = getDb();
+  const rows = await db<DbSession>("sessions").select("*").orderBy("start_time", "desc");
+  const sessions: TestSession[] = [];
+  for (const row of rows) {
+    const results = await db<DbResult>("test_results")
+      .where("session_id", row.id)
+      .orderBy("sort_order", "asc");
+    sessions.push(rowToSession(row, results.map(rowToResult)));
   }
+  return sessions;
 }
 
-export function saveSessions(sessions: TestSession[]) {
-  ensureDataDir();
-  fs.writeFileSync(SESSIONS_FILE, JSON.stringify(sessions, null, 2), "utf-8");
+/**
+ * 轻量化批量加载，用于列表 API：
+ * - 单次批量查询替代 N+1
+ * - DB 层不读取 report_content / output（大字段）
+ * - 崩溃日志只保留文件名，剥离内容
+ */
+export async function loadSessionsSummary(): Promise<TestSession[]> {
+  await ensureMigrated();
+  const db = getDb();
+  const sessionRows = await db<DbSession>("sessions")
+    .select("*")
+    .orderBy("start_time", "desc");
+  if (sessionRows.length === 0) return [];
+
+  const sessionIds = sessionRows.map((s) => s.id);
+  // 批量查询：显式排除 report_content 和 output
+  type LightResult = Omit<DbResult, "report_content" | "output">;
+  const resultRows: LightResult[] = await db("test_results")
+    .whereIn("session_id", sessionIds)
+    .select(
+      "id", "session_id", "arch", "path", "name", "module",
+      "status", "start_time", "end_time", "crash_logs", "report_file", "sort_order",
+    )
+    .orderBy("sort_order", "asc");
+
+  // 按 session_id 分组
+  const bySession: Record<string, LightResult[]> = {};
+  for (const r of resultRows) {
+    (bySession[r.session_id] ??= []).push(r);
+  }
+
+  return sessionRows.map((row) =>
+    rowToSession(
+      row,
+      (bySession[row.id] ?? []).map((r) => ({
+        id: r.id,
+        arch: r.arch,
+        path: r.path,
+        name: r.name,
+        module: r.module,
+        status: r.status as TestStatus,
+        startTime: r.start_time ?? undefined,
+        endTime: r.end_time ?? undefined,
+        // 只保留日志文件名，内容按需拉取
+        crashLogs: r.crash_logs
+          ? (JSON.parse(r.crash_logs) as CrashLog[]).map((l) => ({ name: l.name, content: "" }))
+          : undefined,
+        reportFile: r.report_file ?? undefined,
+        // reportContent 不加载，节省内存
+      })),
+    )
+  );
 }
 
-export function getSession(id: string): TestSession | undefined {
-  return loadSessions().find((s) => s.id === id);
+export async function getSession(id: string): Promise<TestSession | undefined> {
+  await ensureMigrated();
+  const db = getDb();
+  const row = await db<DbSession>("sessions").where("id", id).first();
+  if (!row) return undefined;
+  const results = await db<DbResult>("test_results")
+    .where("session_id", id)
+    .orderBy("sort_order", "asc");
+  return rowToSession(row, results.map(rowToResult));
 }
 
-export function upsertSession(session: TestSession) {
-  const sessions = loadSessions();
-  const idx = sessions.findIndex((s) => s.id === session.id);
-  if (idx >= 0) sessions[idx] = session;
-  else sessions.unshift(session);
-  saveSessions(sessions);
-}
+export async function upsertSession(session: TestSession): Promise<void> {
+  await ensureMigrated();
+  const db = getDb();
 
-export function deleteSession(id: string) {
-  const sessions = loadSessions();
-  const target = sessions.find((s) => s.id === id);
-  if (!target) return;
+  const sessionRow = {
+    id: session.id,
+    device_id: session.deviceId,
+    hap_file: session.hapFile,
+    hap_file_path: session.hapFilePath ?? null,
+    package_name: session.packageName,
+    ability_name: session.abilityName,
+    filter_arch: session.filterArch ?? null,
+    filter_module: session.filterModule != null ? JSON.stringify(session.filterModule) : null,
+    filter_pattern: session.filterPattern ?? null,
+    timeout: session.timeout,
+    status: session.status,
+    start_time: session.startTime,
+    end_time: session.endTime ?? null,
+    summary: session.summary ? JSON.stringify(session.summary) : null,
+  };
 
-  const otherSessions = sessions.filter((s) => s.id !== id);
+  const existing = await db<DbSession>("sessions").where("id", session.id).first();
+  if (existing) {
+    await db("sessions").where("id", session.id).update(sessionRow);
+  } else {
+    await db("sessions").insert(sessionRow);
+  }
 
-  // 收集其他会话仍在引用的崩溃日志文件名（防止误删共享文件）
-  const referencedLogs = new Set(
-    otherSessions.flatMap((s) => s.results.flatMap((r) => r.crashLogs ?? []))
+  // 同步 results：删除已移除的，insert 新增的，update 已有的
+  const existingResultIds = new Set(
+    (await db<DbResult>("test_results").where("session_id", session.id).select("id")).map((r) => r.id)
   );
 
-  // 删除本会话独有的崩溃日志文件
-  for (const result of target.results) {
-    for (const logFile of result.crashLogs ?? []) {
-      if (!referencedLogs.has(logFile)) {
-        const filePath = path.join(FAULTLOG_DIR, path.basename(logFile));
-        try {
-          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        } catch {
-          // 忽略删除失败（文件可能已不存在）
-        }
-      }
+  for (let i = 0; i < session.results.length; i++) {
+    const r = session.results[i];
+    const resultRow = {
+      id: r.id,
+      session_id: session.id,
+      arch: r.arch,
+      path: r.path,
+      name: r.name,
+      module: r.module,
+      status: r.status,
+      start_time: r.startTime ?? null,
+      end_time: r.endTime ?? null,
+      crash_logs: r.crashLogs ? JSON.stringify(r.crashLogs) : null,
+      report_file: r.reportFile ?? null,
+      report_content: r.reportContent ?? null,
+      output: r.output ?? null,
+      sort_order: i,
+    };
+
+    if (existingResultIds.has(r.id)) {
+      await db("test_results").where("id", r.id).update(resultRow);
+      existingResultIds.delete(r.id);
+    } else {
+      await db("test_results").insert(resultRow);
     }
   }
 
-  saveSessions(otherSessions);
-
-  // 删除该会话的 XML 报告目录
-  const reportDir = path.join(REPORTS_BASE_DIR, id);
-  if (fs.existsSync(reportDir)) {
-    try { fs.rmSync(reportDir, { recursive: true, force: true }); } catch { /* 忽略 */ }
-  }
-
-  // 清理孤立崩溃日志：删除磁盘上不被任何会话引用的文件
-  purgeOrphanCrashLogs(otherSessions);
-}
-
-/** 删除 Faultlogger 目录中不属于任何会话的孤立文件 */
-function purgeOrphanCrashLogs(sessions: TestSession[]) {
-  if (!fs.existsSync(FAULTLOG_DIR)) return;
-  const allReferenced = new Set(
-    sessions.flatMap((s) => s.results.flatMap((r) => r.crashLogs ?? []))
-  );
-  try {
-    const files = fs.readdirSync(FAULTLOG_DIR);
-    for (const file of files) {
-      if (!allReferenced.has(file)) {
-        try {
-          fs.unlinkSync(path.join(FAULTLOG_DIR, file));
-        } catch {
-          // 忽略
-        }
-      }
-    }
-  } catch {
-    // 目录不可读，忽略
+  // 删除不再存在的结果行
+  if (existingResultIds.size > 0) {
+    await db("test_results").whereIn("id", [...existingResultIds]).delete();
   }
 }
 
-/** 批量删除所有非运行中的会话（含崩溃日志和 XML 报告目录） */
-export function deleteAllSessions() {
-  const sessions = loadSessions();
-  const running = sessions.filter((s) => s.status === "running");
-  const toDelete = sessions.filter((s) => s.status !== "running");
-
-  const referencedLogs = new Set(
-    running.flatMap((s) => s.results.flatMap((r) => r.crashLogs ?? []))
-  );
-
-  for (const target of toDelete) {
-    // 删除独有崩溃日志
-    for (const result of target.results) {
-      for (const logFile of result.crashLogs ?? []) {
-        if (!referencedLogs.has(logFile)) {
-          const filePath = path.join(FAULTLOG_DIR, path.basename(logFile));
-          try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch { /* 忽略 */ }
-        }
-      }
-    }
-    // 删除 XML 报告目录
-    const reportDir = path.join(REPORTS_BASE_DIR, target.id);
-    if (fs.existsSync(reportDir)) {
-      try { fs.rmSync(reportDir, { recursive: true, force: true }); } catch { /* 忽略 */ }
-    }
-  }
-
-  saveSessions(running);
-  purgeOrphanCrashLogs(running);
-  return toDelete.length;
+export async function deleteSession(id: string): Promise<void> {
+  await ensureMigrated();
+  const db = getDb();
+  // CASCADE 约束自动删除 test_results，内容全在 DB 中无需清理文件
+  await db("test_results").where("session_id", id).delete();
+  await db("sessions").where("id", id).delete();
 }
 
-export function updateTestResult(
+/** 批量删除所有非运行中会话 */
+export async function deleteAllSessions(): Promise<number> {
+  await ensureMigrated();
+  const db = getDb();
+  const toDelete = await db<DbSession>("sessions").whereNot("status", "running").select("id");
+  if (toDelete.length === 0) return 0;
+  const ids = toDelete.map((r) => r.id);
+  await db("test_results").whereIn("session_id", ids).delete();
+  await db("sessions").whereIn("id", ids).delete();
+  return ids.length;
+}
+
+export async function updateTestResult(
   sessionId: string,
   resultId: string,
   updates: Partial<TestResult>
-) {
-  const sessions = loadSessions();
-  const session = sessions.find((s) => s.id === sessionId);
-  if (!session) return;
-  const result = session.results.find((r) => r.id === resultId);
-  if (result) Object.assign(result, updates);
-  saveSessions(sessions);
+): Promise<void> {
+  await ensureMigrated();
+  const db = getDb();
+
+  const row: Record<string, unknown> = {};
+  if (updates.status !== undefined) row.status = updates.status;
+  if (updates.startTime !== undefined) row.start_time = updates.startTime;
+  if (updates.endTime !== undefined) row.end_time = updates.endTime;
+  if (updates.crashLogs !== undefined) row.crash_logs = JSON.stringify(updates.crashLogs);
+  if (updates.reportFile !== undefined) row.report_file = updates.reportFile;
+  if (updates.reportContent !== undefined) row.report_content = updates.reportContent;
+  if (updates.output !== undefined) row.output = updates.output;
+
+  if (Object.keys(row).length > 0) {
+    await db("test_results").where("id", resultId).where("session_id", sessionId).update(row);
+  }
 }
 
 export function computeSummary(results: TestResult[]) {
@@ -201,26 +358,33 @@ export function computeSummary(results: TestResult[]) {
  * 服务启动时调用：将所有未结束的 running 会话标记为 stopped，
  * 并将其中仍处于 pending/running 状态的测试项标记为 failed。
  */
-export function resetRunningSessions() {
-  const sessions = loadSessions();
-  let changed = false;
+export async function resetRunningSessions(): Promise<void> {
+  await ensureMigrated();
+  const db = getDb();
+  const now = new Date().toISOString();
 
-  for (const session of sessions) {
-    if (session.status === "running") {
-      // 未完成的测试项标记为 failed
-      for (const result of session.results) {
-        if (result.status === "pending" || result.status === "running") {
-          result.status = "failed";
-          result.endTime = new Date().toISOString();
-          changed = true;
-        }
-      }
-      session.status = "stopped";
-      session.endTime = new Date().toISOString();
-      session.summary = computeSummary(session.results);
-      changed = true;
-    }
+  const runningSessions = await db<DbSession>("sessions")
+    .where("status", "running")
+    .select("id");
+
+  if (runningSessions.length === 0) return;
+
+  const runningIds = runningSessions.map((s) => s.id);
+
+  // 未完成的 results 标记为 failed
+  await db("test_results")
+    .whereIn("session_id", runningIds)
+    .whereIn("status", ["pending", "running"])
+    .update({ status: "failed", end_time: now });
+
+  // 重新计算每个会话的 summary，并标记 stopped
+  for (const { id } of runningSessions) {
+    const results = await db<DbResult>("test_results").where("session_id", id);
+    const mapped = results.map(rowToResult);
+    const summary = computeSummary(mapped);
+    await db("sessions")
+      .where("id", id)
+      .update({ status: "stopped", end_time: now, summary: JSON.stringify(summary) });
   }
-
-  if (changed) saveSessions(sessions);
 }
+

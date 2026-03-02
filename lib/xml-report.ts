@@ -20,6 +20,8 @@ export interface XmlTestFunction {
   message?: string;
   /** DataTag（数据驱动子用例） */
   dataTags: string[];
+  /** Description（xfail 说明等） */
+  descriptions: string[];
   /** 单函数总耗时 ms */
   durationMs?: number;
   /** 是否有任何失败/error incident */
@@ -61,6 +63,10 @@ export function parseXmlReport(xml: string): XmlReportResult {
     const dataTags = [...body.matchAll(/<DataTag><!\[CDATA\[([^\]]*)\]\]><\/DataTag>|<DataTag>([^<]*)<\/DataTag>/g)]
       .map((dt) => dt[1] ?? dt[2] ?? "");
 
+    // Descriptions
+    const descriptions = [...body.matchAll(/<Description><!\[CDATA\[([\s\S]*?)\]\]><\/Description>|<Description>([^<]*)<\/Description>/g)]
+      .map((d) => (d[1] ?? d[2] ?? "").trim()).filter(Boolean);
+
     // Message（失败详情）
     const message = body.match(/<Message>\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*<\/Message>/)?.[1]
       ?? body.match(/<Message>([^<]*)<\/Message>/)?.[1];
@@ -73,7 +79,7 @@ export function parseXmlReport(xml: string): XmlReportResult {
     const hasFailed = incidentTypes.some((t) => t === "fail" || t === "error");
     const dominantType = hasFailed ? "fail" : (incidentTypes[0] ?? "pass");
 
-    return { name, type: dominantType, message, dataTags, durationMs, hasFailed };
+    return { name, type: dominantType, message, dataTags, descriptions, durationMs, hasFailed };
   });
 
   const passed = functions.length > 0 && !functions.some((f) => f.hasFailed);

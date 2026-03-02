@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import * as fs from "fs";
-import * as path from "path";
+import { getDb, ensureMigrated } from "@/lib/db";
 import { parseXmlReport } from "@/lib/xml-report";
-import { REPORTS_BASE_DIR } from "@/lib/paths";
 
 /**
- * GET /api/reports/xml/[sessionId]/[...filePath]
+ * GET /api/reports/xml/[sessionId]/[resultId]
  * 返回解析后的 XML 报告数据（parsed JSON）
  * 查询参数 ?raw=1 返回原始 XML 文本
  */
@@ -15,25 +13,25 @@ export async function GET(
 ) {
   const { filePath: segments } = await params;
   if (!segments || segments.length < 2) {
-    return NextResponse.json({ error: "路径不合法" }, { status: 400 });
+    return NextResponse.json({ error: "路径不合法，需要 /xml/[sessionId]/[resultId]" }, { status: 400 });
   }
 
-  // 第一段是 sessionId，其余是相对路径
-  const [sessionId, ...rest] = segments;
-  const relPath = rest.join(path.sep);
-  // 防止路径穿越
-  const safeRel = path.normalize(relPath).replace(/^(\.\.(\/|\\|$))+/, "");
-  const absPath = path.join(REPORTS_BASE_DIR, sessionId, safeRel);
+  const [sessionId, resultId] = segments;
 
-  if (!absPath.startsWith(REPORTS_BASE_DIR)) {
-    return NextResponse.json({ error: "非法路径" }, { status: 403 });
+  await ensureMigrated();
+  const db = getDb();
+
+  const row = await db("test_results")
+    .where("id", resultId)
+    .where("session_id", sessionId)
+    .select("report_content")
+    .first();
+
+  if (!row || !row.report_content) {
+    return NextResponse.json({ error: "XML 报告不存在" }, { status: 404 });
   }
 
-  if (!fs.existsSync(absPath)) {
-    return NextResponse.json({ error: "文件不存在" }, { status: 404 });
-  }
-
-  const xml = fs.readFileSync(absPath, "utf-8");
+  const xml = row.report_content as string;
 
   if (req.nextUrl.searchParams.get("raw") === "1") {
     return new NextResponse(xml, {

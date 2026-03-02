@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession, deleteSession } from "@/lib/store";
+import { getSession, deleteSession, stripSessionContent } from "@/lib/store";
 import { stopSession, rerunSingleTest } from "@/lib/test-runner";
 
 /** GET /api/tests/[id] - 获取单个会话详情 */
@@ -8,9 +8,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const session = getSession(id);
+  const session = await getSession(id);
   if (!session) return NextResponse.json({ error: "会话不存在" }, { status: 404 });
-  return NextResponse.json({ session });
+  return NextResponse.json({ session: stripSessionContent(session) });
 }
 
 /**
@@ -54,12 +54,12 @@ export async function DELETE(
   const action = req.nextUrl.searchParams.get("action");
 
   if (action === "delete") {
-    const session = getSession(id);
+    const session = await getSession(id);
     if (!session) return NextResponse.json({ error: "会话不存在" }, { status: 404 });
     if (session.status === "running") {
       return NextResponse.json({ error: "运行中的会话不能删除" }, { status: 400 });
     }
-    deleteSession(id);
+    await deleteSession(id);
     return NextResponse.json({ ok: true });
   }
 

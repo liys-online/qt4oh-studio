@@ -7,6 +7,7 @@ import { exec, spawn } from "child_process";
 import { promisify } from "util";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 import { v4 as uuidv4 } from "uuid";
 
 const execAsync = promisify(exec);
@@ -253,6 +254,53 @@ export async function downloadFaultLog(
     true
   );
   return result !== null;
+}
+
+/** 下载崩溃日志内容（下载到系统临时目录，读取后删除，返回文本内容）*/
+export async function downloadFaultLogContent(
+  deviceId: string,
+  filename: string
+): Promise<string | null> {
+  const remotePath = `/data/log/faultlog/faultlogger/${filename}`;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "qt4oh-crash-"));
+  const localPath = path.join(tmpDir, filename);
+  try {
+    const result = await runCommand(
+      buildHdcCommand(`-t ${deviceId} file recv ${remotePath} ${localPath}`),
+      true
+    );
+    if (result === null || !fs.existsSync(localPath)) return null;
+    return fs.readFileSync(localPath, "utf-8");
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+  }
+}
+
+/**
+ * 下载测试报告 XML 内容（下载到系统临时目录，读取后删除，返回文本内容）
+ * 远端路径：/data/app/el2/100/base/<packageName>/files/<libPath>.xml
+ */
+export async function downloadTestReportContent(
+  deviceId: string,
+  packageName: string,
+  libPath: string,
+  onCommand?: (cmd: string) => void
+): Promise<string | null> {
+  const xmlRelPath = libPath.replace(/\.so$/, ".xml");
+  const remotePath = `/data/app/el2/100/base/${packageName}/files/${xmlRelPath}`;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "qt4oh-xml-"));
+  const localPath = path.join(tmpDir, path.basename(xmlRelPath));
+  try {
+    const result = await runCommand(
+      buildHdcCommand(`-t ${deviceId} file recv "${remotePath}" "${localPath}"`),
+      true,
+      onCommand
+    );
+    if (result === null || !fs.existsSync(localPath)) return null;
+    return fs.readFileSync(localPath, "utf-8");
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+  }
 }
 
 /** 使用 spawn 异步执行 hdc 命令，实时回调输出（用于 SSE 流式日志） */

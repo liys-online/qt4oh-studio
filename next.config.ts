@@ -6,8 +6,15 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "500mb",
     },
   },
-  // unzipper 及其可选依赖（@aws-sdk/client-s3 等）只在 Node.js 运行时使用，不打包进客户端
-  serverExternalPackages: ["unzipper"],
+  // 以下包只在 Node.js 运行时使用，不打包进客户端
+  // knex 会按需 require 方言驱动（mysql/pg/better-sqlite3），必须保持为外部包
+  serverExternalPackages: [
+    "unzipper",
+    "knex",
+    "better-sqlite3",
+    "mysql2",
+    "pg",
+  ],
 };
 
 export default nextConfig;

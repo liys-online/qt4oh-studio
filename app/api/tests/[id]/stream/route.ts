@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getSession } from "@/lib/store";
+import { getSession, stripSessionContent } from "@/lib/store";
 import {
   registerLogHandler,
   unregisterLogHandler,
@@ -14,7 +14,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const session = getSession(id);
+  const session = await getSession(id);
 
   const encoder = new TextEncoder();
 
@@ -37,7 +37,7 @@ export async function GET(
 
       // 如果会话已完成，先推送最终状态；但仍保持连接以接收后续重跑推送
       if (session.status !== "running") {
-        const data = JSON.stringify({ type: "done", session });
+        const data = JSON.stringify({ type: "done", session: stripSessionContent(session) });
         try { controller.enqueue(encoder.encode(`data: ${data}\n\n`)); } catch { return; }
       }
 
@@ -65,8 +65,8 @@ export async function GET(
       registerLogHandler(id, handler);
 
       // 定期推送会话状态（仅在运行中）
-      const interval = setInterval(() => {
-        const current = getSession(id);
+      const interval = setInterval(async () => {
+        const current = await getSession(id);
         if (!current) return;
         if (current.status !== "running") {
           clearInterval(interval);
@@ -75,7 +75,7 @@ export async function GET(
         try {
           controller.enqueue(
             encoder.encode(
-              `data: ${JSON.stringify({ type: "status", session: current })}\n\n`
+              `data: ${JSON.stringify({ type: "status", session: stripSessionContent(current) })}\n\n`
             )
           );
         } catch {
