@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Spinner } from "@heroui/react";
 import Link from "next/link";
+import { NewTestButton } from "@/components/NewTestButton";
+import { LoadingState } from "@/components/LoadingState";
+import { SessionStatusBadge } from "@/components/SessionStatusBadge";
+import { cardStyle } from "@/lib/status";
+import { formatDateTime } from "@/lib/utils";
 
 interface Session {
   id: string;
@@ -24,12 +28,6 @@ interface Overview {
   totalTimeout: number;
   totalCrash: number;
 }
-
-const statusStyle: Record<string, { bg: string; text: string; label: string }> = {
-  completed: { bg: "rgba(16,185,129,0.1)", text: "#059669", label: "已完成" },
-  running:   { bg: "rgba(99,102,241,0.1)", text: "#6366f1",  label: "运行中" },
-  stopped:   { bg: "rgba(245,158,11,0.1)", text: "#d97706",  label: "已停止" },
-};
 
 export default function ReportsPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -65,23 +63,13 @@ export default function ReportsPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Spinner size="lg" />
-      </div>
-    );
+    return <LoadingState />;
   }
 
   const passRate =
     overview && overview.totalTests > 0
       ? Math.round((overview.totalSuccess / overview.totalTests) * 100)
       : 0;
-
-  const cardStyle = {
-    background: "rgba(255,255,255,0.85)",
-    backdropFilter: "blur(12px)",
-    border: "1px solid rgba(255,255,255,0.9)",
-  };
 
   const statItems = overview
     ? [
@@ -100,16 +88,7 @@ export default function ReportsPage() {
           <h1 className="text-2xl font-bold text-gray-800">报告分析</h1>
           <p className="text-sm text-gray-500 mt-1">历史测试统计与崩溃日志</p>
         </div>
-        <Link
-          href="/tests"
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5"
-          style={{ background: "linear-gradient(135deg, #41CD52, #21a834)" }}
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-          </svg>
-          新建测试
-        </Link>
+        <NewTestButton />
       </div>
 
       {/* 统计卡片 */}
@@ -217,7 +196,6 @@ export default function ReportsPage() {
         ) : (
           <div className="space-y-3">
             {sessions.map((s) => {
-              const st = statusStyle[s.status] ?? { bg: "rgba(0,0,0,0.06)", text: "#64748b", label: s.status };
               const passCount = s.summary?.success ?? 0;
               const total = s.summary?.total ?? 0;
               const rate = total > 0 ? Math.round((passCount / total) * 100) : null;
@@ -233,12 +211,10 @@ export default function ReportsPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-gray-800 truncate">{s.hapFile}</p>
-                      <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: st.bg, color: st.text }}>
-                        {st.label}
-                      </span>
+                      <SessionStatusBadge status={s.status} />
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">
-                      {s.deviceId} · {new Date(s.startTime).toLocaleString("zh-CN")}
+                      {s.deviceId} · {formatDateTime(s.startTime)}
                       {s.endTime && ` → ${new Date(s.endTime).toLocaleTimeString("zh-CN")}`}
                     </p>
                     {s.summary && (

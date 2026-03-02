@@ -3,6 +3,8 @@
 import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Spinner } from "@heroui/react";
+import { testStatusStyle as statusStyle, sessionStatusStyle, cardStyle } from "@/lib/status";
+import { formatDateTime } from "@/lib/utils";
 
 interface TestResult {
   id: string;
@@ -52,21 +54,6 @@ interface Session {
   results: TestResult[];
   summary?: Summary;
 }
-
-const statusStyle: Record<string, { bg: string; text: string; label: string; dot: string }> = {
-  success: { bg: "rgba(16,185,129,0.12)", text: "#059669", label: "通过", dot: "#10b981" },
-  timeout: { bg: "rgba(245,158,11,0.12)", text: "#d97706", label: "超时", dot: "#f59e0b" },
-  crash:   { bg: "rgba(239,68,68,0.12)",  text: "#dc2626", label: "崩溃", dot: "#ef4444" },
-  failed:  { bg: "rgba(239,68,68,0.12)",  text: "#dc2626", label: "失败", dot: "#ef4444" },
-  running: { bg: "rgba(65,205,82,0.12)", text: "#1d7a2e", label: "运行中", dot: "#41CD52" },
-  pending: { bg: "rgba(148,163,184,0.12)", text: "#64748b", label: "等待", dot: "#94a3b8" },
-};
-
-const sessionStatusStyle: Record<string, { bg: string; text: string; label: string }> = {
-  completed: { bg: "rgba(16,185,129,0.15)", text: "#059669", label: "已完成" },
-  running:   { bg: "rgba(65,205,82,0.15)", text: "#1d7a2e", label: "运行中" },
-  stopped:   { bg: "rgba(148,163,184,0.15)", text: "#64748b", label: "已停止" },
-};
 
 export default function ReportDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -286,7 +273,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
             {session.hapFile}
           </h1>
           <p style={{ fontSize: 12, color: "#94a3b8", margin: "2px 0 0" }}>
-            {session.deviceId} · {new Date(session.startTime).toLocaleString("zh-CN")}
+              {session.deviceId} · {formatDateTime(session.startTime)}
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>

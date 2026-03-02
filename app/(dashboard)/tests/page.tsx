@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { Spinner } from "@heroui/react";
 import { useRouter } from "next/navigation";
 import { useDevices } from "../devices-context";
+import { SessionStatusBadge } from "@/components/SessionStatusBadge";
+import { cardStyle } from "@/lib/status";
+import { formatTime } from "@/lib/utils";
 
 interface HapInfo {
   fileName: string;
@@ -234,32 +237,6 @@ export default function TestsPage() {
 
   const runningSessions = sessions.filter((s) => s.status === "running");
   const historySessions = sessions.filter((s) => s.status !== "running");
-
-  const cardStyle = {
-    background: "rgba(255,255,255,0.85)",
-    backdropFilter: "blur(12px)",
-    border: "1px solid rgba(255,255,255,0.9)",
-  };
-
-  function SessionStatusBadge({ status }: { status: "running" | "completed" | "stopped" }) {
-    if (status === "running") return (
-              <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: "rgba(65,205,82,0.12)", color: "#1d7a2e" }}>
-        <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#41CD52" }} />
-        运行中
-      </span>
-    );
-    if (status === "completed") return (
-      <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: "rgba(16,185,129,0.1)", color: "#059669" }}>已完成</span>
-    );
-    return (
-      <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: "rgba(245,158,11,0.1)", color: "#d97706" }}>已停止</span>
-    );
-  }
-
-  function formatTime(iso: string) {
-    const d = new Date(iso);
-    return d.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-  }
 
   function SessionCard({ s }: { s: SessionSummary }) {
     const total = s.summary?.total ?? s.results.length;
