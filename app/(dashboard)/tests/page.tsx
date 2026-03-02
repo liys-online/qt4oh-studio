@@ -4,9 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { Spinner } from "@heroui/react";
 import { useRouter } from "next/navigation";
 import { useDevices } from "../devices-context";
-import { SessionStatusBadge } from "@/components/SessionStatusBadge";
+import { SessionCard } from "@/components/SessionCard";
 import { cardStyle } from "@/lib/status";
-import { formatTime } from "@/lib/utils";
 
 interface HapInfo {
   fileName: string;
@@ -237,79 +236,6 @@ export default function TestsPage() {
 
   const runningSessions = sessions.filter((s) => s.status === "running");
   const historySessions = sessions.filter((s) => s.status !== "running");
-
-  function SessionCard({ s }: { s: SessionSummary }) {
-    const total = s.summary?.total ?? s.results.length;
-    const success = s.summary?.success ?? s.results.filter((r) => r.status === "success").length;
-    const percent = total > 0 ? Math.round((success / total) * 100) : 0;
-    const openSession = () => router.push(`/tests/${s.id}`);
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        openSession();
-      }
-    };
-    return (
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={openSession}
-        onKeyDown={handleKeyDown}
-        className="w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:scale-[1.01]"
-        style={{ background: s.status === "running" ? "linear-gradient(135deg,rgba(65,205,82,0.07),rgba(33,168,52,0.06))" : "rgba(0,0,0,0.03)", border: s.status === "running" ? "1.5px solid rgba(65,205,82,0.25)" : "1.5px solid rgba(0,0,0,0.07)" }}
-      >
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-          style={{ background: s.status === "running" ? "linear-gradient(135deg,#41CD52,#21a834)" : s.status === "completed" ? "linear-gradient(135deg,#10b981,#059669)" : "rgba(0,0,0,0.1)" }}>
-          {s.status === "running" ? (
-            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          ) : s.status === "completed" ? (
-            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-            </svg>
-          ) : (
-            <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          )}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-0.5">
-            <p className="text-xs font-semibold text-gray-800 truncate">{s.hapFile}</p>
-            <SessionStatusBadge status={s.status} />
-          </div>
-          <div className="flex items-center gap-3">
-            <p className="text-xs text-gray-400 truncate">设备: {s.deviceId}</p>
-            <p className="text-xs text-gray-400">{formatTime(s.startTime)}</p>
-            {total > 0 && (
-              <p className="text-xs" style={{ color: "#1d7a2e" }}>{success}/{total} ({percent}%)</p>
-            )}
-          </div>
-        </div>
-        {s.status !== "running" && (
-          <button
-            onClick={(e) => handleDelete(e, s.id)}
-            disabled={deletingId === s.id}
-            className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all hover:bg-red-50 text-gray-300 hover:text-red-400 disabled:opacity-50"
-            title="删除记录"
-          >
-            {deletingId === s.id ? (
-              <Spinner size="sm" />
-            ) : (
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            )}
-          </button>
-        )}
-        <svg className="w-4 h-4 text-gray-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-      </div>
-    );
-  }
 
   return (
     <div className="w-full px-2 lg:px-4 2xl:px-6">
@@ -735,7 +661,9 @@ export default function TestsPage() {
             </div>
             {runningSessions.length > 0 ? (
               <div className="space-y-2">
-                {runningSessions.map((s) => <SessionCard key={s.id} s={s} />)}
+                {runningSessions.map((s) => (
+                  <SessionCard key={s.id} session={s} href={`/tests/${s.id}`} onDelete={handleDelete} deletingId={deletingId} />
+                ))}
               </div>
             ) : (
               <div className="rounded-xl p-6 text-center" style={{ background: "rgba(255,255,255,0.7)", border: "1px dashed rgba(65,205,82,0.2)" }}>
@@ -797,7 +725,9 @@ export default function TestsPage() {
               </div>
             ) : showHistory ? (
               <div className="px-4 pb-4 space-y-2">
-                {historySessions.slice(0, 10).map((s) => <SessionCard key={s.id} s={s} />)}
+                {historySessions.slice(0, 10).map((s) => (
+                  <SessionCard key={s.id} session={s} href={`/tests/${s.id}`} onDelete={handleDelete} deletingId={deletingId} />
+                ))}
                 {historySessions.length > 10 && (
                   <p className="text-xs text-center text-gray-400 pt-1">仅显示最近 10 条</p>
                 )}

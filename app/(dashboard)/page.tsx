@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Chip, Button } from "@heroui/react";
+import { Button, Spinner } from "@heroui/react";
 import Link from "next/link";
 import { useDevices } from "./devices-context";
 import { NewTestButton } from "@/components/NewTestButton";
 import { LoadingState } from "@/components/LoadingState";
-import { formatDateTime } from "@/lib/utils";
+import { SessionCard } from "@/components/SessionCard";
 
 interface Overview {
   totalSessions: number;
@@ -66,17 +66,6 @@ function StatCard({
   );
 }
 
-const statusColorMap: Record<string, "success" | "warning" | "danger" | "primary" | "default"> = {
-  completed: "success",
-  running: "primary",
-  stopped: "warning",
-};
-
-const statusLabelMap: Record<string, string> = {
-  completed: "已完成",
-  running: "运行中",
-  stopped: "已停止",
-};
 
 export default function DashboardPage() {
   const { devices, hdcVersion } = useDevices();
@@ -345,58 +334,9 @@ export default function DashboardPage() {
             <Button size="sm" color="primary" variant="flat" as={Link} href="/tests">开始测试</Button>
           </div>
         ) : (
-          <div>
-            {sessions.map((s, i) => (
-              <div
-                key={s.id}
-                className="flex items-center justify-between px-5 py-3.5 hover:bg-indigo-50/50 transition-colors"
-                style={{ borderBottom: i < sessions.length - 1 ? "1px solid rgba(0,0,0,0.04)" : "none" }}
-              >
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: s.status === "completed" ? "linear-gradient(135deg, #10b981, #059669)" : s.status === "running" ? "linear-gradient(135deg, #6366f1, #8b5cf6)" : "linear-gradient(135deg, #f59e0b, #d97706)" }}>
-                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2" />
-                    </svg>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">{s.hapFile}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {s.deviceId} · {formatDateTime(s.startTime)}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 ml-4 shrink-0">
-                  {s.summary && (
-                    <div className="hidden sm:flex items-center gap-1 text-xs">
-                      <span className="font-semibold text-emerald-600">{s.summary.success}</span>
-                      <span className="text-gray-300">/</span>
-                      <span className="text-gray-500">{s.summary.total}</span>
-                    </div>
-                  )}
-                  <Chip color={statusColorMap[s.status] ?? "default"} variant="flat" size="sm">
-                    {statusLabelMap[s.status] ?? s.status}
-                  </Chip>
-                  <Button size="sm" variant="light" as={Link} href={`/reports/${s.id}`} className="text-indigo-500 font-medium">
-                    详情
-                  </Button>
-                  {s.status !== "running" && (
-                    <button
-                      onClick={(e) => handleDelete(e, s.id)}
-                      disabled={deletingId === s.id}
-                      className="w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:bg-red-50 text-gray-300 hover:text-red-400 disabled:opacity-50"
-                      title="删除记录"
-                    >
-                      {deletingId === s.id ? (
-                        <Spinner size="sm" />
-                      ) : (
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      )}
-                    </button>
-                  )}
-                </div>
-              </div>
+          <div className="space-y-2 px-5 py-3">
+            {sessions.map((s) => (
+              <SessionCard key={s.id} session={s} href={`/reports/${s.id}`} onDelete={handleDelete} deletingId={deletingId} />
             ))}
           </div>
         )}

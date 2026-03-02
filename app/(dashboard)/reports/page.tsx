@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { Spinner } from "@heroui/react";
 import { NewTestButton } from "@/components/NewTestButton";
 import { LoadingState } from "@/components/LoadingState";
-import { SessionStatusBadge } from "@/components/SessionStatusBadge";
+import { SessionCard } from "@/components/SessionCard";
 import { cardStyle } from "@/lib/status";
-import { formatDateTime } from "@/lib/utils";
 
 interface Session {
   id: string;
@@ -195,52 +194,9 @@ export default function ReportsPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {sessions.map((s) => {
-              const passCount = s.summary?.success ?? 0;
-              const total = s.summary?.total ?? 0;
-              const rate = total > 0 ? Math.round((passCount / total) * 100) : null;
-              return (
-                <div key={s.id} className="flex items-center gap-4 p-4 rounded-xl transition-all hover:-translate-y-0.5"
-                  style={{ background: "rgba(0,0,0,0.02)", border: "1px solid rgba(0,0,0,0.06)" }}>
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-                    style={{ background: s.status === "completed" ? "linear-gradient(135deg, #10b981, #059669)" : s.status === "running" ? "linear-gradient(135deg, #6366f1, #8b5cf6)" : "linear-gradient(135deg, #f59e0b, #d97706)" }}>
-                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                    </svg>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold text-gray-800 truncate">{s.hapFile}</p>
-                      <SessionStatusBadge status={s.status} />
-                    </div>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {s.deviceId} · {formatDateTime(s.startTime)}
-                      {s.endTime && ` → ${new Date(s.endTime).toLocaleTimeString("zh-CN")}`}
-                    </p>
-                    {s.summary && (
-                      <div className="flex items-center gap-3 mt-1.5">
-                        <span className="text-xs font-semibold" style={{ color: "#10b981" }}>✓ {s.summary.success}</span>
-                        <span className="text-xs" style={{ color: "#f59e0b" }}>⏱ {s.summary.timeout}</span>
-                        <span className="text-xs" style={{ color: "#ef4444" }}>💥 {s.summary.crash}</span>
-                        <span className="text-xs text-gray-400">/ {s.summary.total} 总计</span>
-                        {rate !== null && (
-                          <span className="text-xs font-bold ml-auto" style={{ color: rate >= 80 ? "#10b981" : rate >= 50 ? "#f59e0b" : "#ef4444" }}>
-                            {rate}%
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <Link
-                    href={`/reports/${s.id}`}
-                    className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg transition-all hover:opacity-80"
-                    style={{ background: "rgba(65,205,82,0.1)", color: "#1d7a2e" }}
-                  >
-                    详情
-                  </Link>
-                </div>
-              );
-            })}
+            {sessions.map((s) => (
+              <SessionCard key={s.id} session={s} href={`/reports/${s.id}`} />
+            ))}
           </div>
         )}
       </div>
