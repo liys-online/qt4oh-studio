@@ -104,13 +104,25 @@ export async function getDeviceInfo(deviceId: string): Promise<DeviceInfo> {
 
 /** 获取连接设备列表 */
 export async function getDeviceList(): Promise<HdcDevice[]> {
-  const output = await runCommand(buildHdcCommand("list targets"), true);
+  const output = await runCommand(buildHdcCommand("list targets -v"), true);
   if (!output) return [];
   return output
     .split("\n")
     .map((line) => line.trim())
-    .filter((line) => line && line !== "[Empty]")
-    .map((id) => ({ id, status: "online" }));
+    // filter out empty lines, "[Empty]" placeholder, and hdc error messages (e.g. [E000002])
+    .filter((line) => line && line !== "[Empty]" && !/^\[E\d+\]/.test(line))
+    .map((line) => {
+      // hdc list targets -v format: "<serial>\t<connection-type>\t<status>"
+      // hdc list targets format:    "<serial>" or "<serial>\t<status>"
+      const parts = line.split("\t");
+      const id = parts[0].trim();
+      // last column is the status when multiple columns are present
+      const rawStatus = parts.length >= 2 ? parts[parts.length - 1].trim() : "online";
+      const status = rawStatus.toLowerCase();
+      return { id, status };
+    })
+    // only surface devices that are online
+    .filter(({ id, status }) => id && status === "online");
 }
 
 /** 安装 HAP 包到指定设备，返回 { success, message } */
