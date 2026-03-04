@@ -13,18 +13,34 @@ import { v4 as uuidv4 } from "uuid";
 const execAsync = promisify(exec);
 
 const HDC_ENV_PATH = process.env.HDC_PATH;
+const IS_WINDOWS = process.platform === "win32";
+const HDC_EXE = IS_WINDOWS ? "hdc.exe" : "hdc";
 
 function resolveBundledHdcPath(): string | null {
   const candidates = [
     HDC_ENV_PATH,
-    path.join(process.cwd(), "public", "hdc.exe"),
-    path.join(process.cwd(), "hdc.exe"),
-    process.resourcesPath ? path.join(process.resourcesPath, "hdc.exe") : null,
+    path.join(process.cwd(), "public", HDC_EXE),
+    path.join(process.cwd(), HDC_EXE),
+    process.resourcesPath ? path.join(process.resourcesPath, HDC_EXE) : null,
+    // macOS: also check inside app bundle Resources
+    !IS_WINDOWS && process.resourcesPath
+      ? path.join(process.resourcesPath, "app", "public", HDC_EXE)
+      : null,
   ].filter(Boolean) as string[];
 
   for (const p of candidates) {
     try {
-      if (fs.existsSync(p)) return p;
+      if (fs.existsSync(p)) {
+        // 确保在 macOS/Linux 上 hdc 拥有执行权限
+        if (!IS_WINDOWS) {
+          try {
+            fs.accessSync(p, fs.constants.X_OK);
+          } catch {
+            fs.chmodSync(p, 0o755);
+          }
+        }
+        return p;
+      }
     } catch {
       // ignore lookup errors
     }
