@@ -4,3 +4,50 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
+
+/* ── 响应式布局：侧栏抽屉 & 主内容区 ──────────────────────────────────────── */
+
+/* 移动端遮罩默认不显示 */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 9998;
+  backdrop-filter: blur(2px);
+}
+
+@media (max-width: 767px) {
+  /* 显示顶部导航栏：由 Tailwind 工具类 hidden / max-[767px]:flex 控制 */
+
+  /* 侧栏默认收起（平移到屏幕外） */
+  .sidebar-wrapper {
+    transform: translateX(-260px) !important;
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  }
+  .sidebar-wrapper.sidebar-open {
+    transform: translateX(0) !important;
+  }
+
+  /* 打开时显示遮罩 */
+  .sidebar-backdrop.sidebar-open {
+    display: block;
+  }
+
+  /* 主内容区不再偏移 */
+  .main-with-sidebar {
+    margin-left: 0 !important;
+  }
+
+  /* 主内容区内部缩小 padding */
+  .main-inner-padding {
+    padding: 14px 14px !important;
+  }
+}
+
+/* 平板（768-1023px）：适当收窄内边距 */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .main-inner-padding {
+    padding: 18px 20px !important;
+  }
+}

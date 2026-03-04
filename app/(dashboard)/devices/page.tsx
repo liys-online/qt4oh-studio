@@ -24,9 +24,9 @@ export default function DevicesPage() {
   return (
     <div className="space-y-7">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">设备管理</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800">设备管理</h1>
           <p className="text-sm text-gray-500 mt-1">已连接的 HarmonyOS 设备 · 每 5 秒自动刷新</p>
         </div>
         <button

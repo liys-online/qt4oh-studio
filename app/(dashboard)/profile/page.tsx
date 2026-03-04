@@ -128,7 +128,7 @@ export default function ProfilePage() {
     <div className="space-y-7 max-w-2xl">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-800">个人中心</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-800">个人中心</h1>
         <p className="text-sm text-gray-500 mt-1">查看和修改您的账户信息</p>
       </div>
 

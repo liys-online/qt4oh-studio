@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -9,6 +8,13 @@ interface SessionUser {
   username: string;
   displayName: string;
   role: string;
+}
+
+interface SidebarProps {
+  /** 移动端抽屉是否打开（桌面端忽略此 prop） */
+  isOpen?: boolean;
+  /** 关闭抽屉的回调（移动端点击遮罩或导航后调用） */
+  onClose?: () => void;
 }
 
 const navGroups = [
@@ -98,7 +104,7 @@ const navGroups = [
   },
 ];
 
-export function Sidebar() {
+export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const pathname  = usePathname();
   const router    = useRouter();
   const [user, setUser] = useState<SessionUser | null>(null);
@@ -110,18 +116,35 @@ export function Sidebar() {
       .catch(() => {});
   }, []);
 
+  // 路由跳转后在移动端自动关闭侧栏
+  useEffect(() => {
+    onClose?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
   }
 
   return (
-    <aside style={{
-      position: "fixed", left: 0, top: 0, height: "100vh", width: 250, minWidth: 250,
-      display: "flex", flexDirection: "column", zIndex: 9999,
-      background: "linear-gradient(180deg, #1a2433 0%, #1d252c 60%, #1a2433 100%)",
-      overflowY: "auto",
-    }}>
+    <>
+      {/* 移动端遮罩 */}
+      <div
+        className={`sidebar-backdrop${isOpen ? " sidebar-open" : ""}`}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      <aside
+        className={`sidebar-wrapper${isOpen ? " sidebar-open" : ""}`}
+        style={{
+          position: "fixed", left: 0, top: 0, height: "100vh", width: 250, minWidth: 250,
+          display: "flex", flexDirection: "column", zIndex: 9999,
+          background: "linear-gradient(180deg, #1a2433 0%, #1d252c 60%, #1a2433 100%)",
+          overflowY: "auto",
+        }}
+      >
       {/* 迎光效果 */}
       <div style={{
         position: "absolute", inset: 0, pointerEvents: "none",
@@ -130,7 +153,8 @@ export function Sidebar() {
 
       {/* Logo */}
       <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, padding: "20px 20px 16px" }}>
-        <Image
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           src="/logo.svg"
           alt="logo"
           width={96}
@@ -254,5 +278,6 @@ export function Sidebar() {
         <p style={{ fontSize: 11, color: "rgba(148,163,184,0.6)", margin: "4px 0 0" }}>Qt for OpenHarmony</p>
       </div>
     </aside>
+    </>
   );
 }

@@ -39,7 +39,7 @@ export default function ScreenshotPage() {
     <div className="space-y-7">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-800">截图工具</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-800">截图工具</h1>
         <p className="text-sm text-gray-500 mt-1">对已连接的 HarmonyOS 设备进行实时截图</p>
       </div>
 

@@ -134,7 +134,7 @@ export default function LogsPage() {
     <div style={{ height: "calc(100vh - 80px)", display: "flex", flexDirection: "column", gap: 10 }}>
       {/* Header */}
       <div style={{ flexShrink: 0 }}>
-        <h1 className="text-2xl font-bold text-gray-800">HiLog 日志</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-800">HiLog 日志</h1>
         <p className="text-sm text-gray-500 mt-0.5">
           实时查看 HarmonyOS 设备 hilog 输出，支持级别、类型、Tag、Domain、PID、正则过滤
         </p>

@@ -135,19 +135,19 @@ export default function DashboardPage() {
   return (
     <div className="space-y-7">
       {/* Hero Header */}
-      <div className="relative overflow-hidden rounded-2xl p-7" style={{ background: "linear-gradient(135deg, #1d252c 0%, #243040 50%, #1d252c 100%)" }}>
+      <div className="relative overflow-hidden rounded-2xl p-5 sm:p-7" style={{ background: "linear-gradient(135deg, #1d252c 0%, #243040 50%, #1d252c 100%)" }}>
         {/* 装饰圆 */}
         <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-10" style={{ background: "white", transform: "translate(30%, -30%)" }} />
         <div className="absolute bottom-0 right-40 w-32 h-32 rounded-full opacity-10" style={{ background: "white", transform: "translate(0, 40%)" }} />
         <div className="absolute top-4 right-56 w-16 h-16 rounded-full opacity-5" style={{ background: "white" }} />
-        <div className="relative flex items-start justify-between">
-          <div>
+        <div className="relative flex items-start justify-between flex-wrap gap-4">
+          <div className="min-w-0">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-xs font-medium px-2.5 py-1 rounded-full" style={{ background: "rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.9)" }}>
                 ✨ Qt for OpenHarmony
               </span>
             </div>
-            <h1 className="text-2xl font-bold text-white">单元测试平台</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-white">单元测试平台</h1>
             <p className="text-sm mt-1" style={{ color: "rgba(200,235,205,0.9)" }}>
               管理 HarmonyOS 设备、执行 Qt 测试并分析结果
             </p>

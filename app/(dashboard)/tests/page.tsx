@@ -242,7 +242,7 @@ export default function TestsPage() {
       <div className="space-y-7">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">测试执行</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800">测试执行</h1>
           <p className="text-sm text-gray-500 mt-1">按步骤配置并启动 Qt 单元测试</p>
         </div>
 

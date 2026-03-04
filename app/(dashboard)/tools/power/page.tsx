@@ -67,7 +67,7 @@ export default function PowerPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-800">电源管理</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-800">电源管理</h1>
         <p className="text-sm text-gray-500 mt-0.5">
           通过 <code className="text-xs bg-gray-100 px-1 rounded">power-shell</code> 控制设备电源状态：亮屏、熄屏、电源模式、自动熄屏时间
         </p>

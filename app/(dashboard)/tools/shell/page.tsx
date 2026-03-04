@@ -67,7 +67,7 @@ export default function ShellPage() {
     <div className="space-y-5" style={{ height: "calc(100vh - 80px)", display: "flex", flexDirection: "column" }}>
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-800">Shell 终端</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Shell 终端</h1>
         <p className="text-sm text-gray-500 mt-1">通过 hdc shell 在设备上执行命令，支持 <code className="text-xs bg-gray-100 px-1 rounded">-b bundlename</code> 访问应用沙箱</p>
       </div>
 

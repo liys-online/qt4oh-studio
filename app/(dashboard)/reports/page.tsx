@@ -82,9 +82,9 @@ export default function ReportsPage() {
   return (
     <div className="space-y-7">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">报告分析</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800">报告分析</h1>
           <p className="text-sm text-gray-500 mt-1">历史测试统计与崩溃日志</p>
         </div>
         <NewTestButton />
