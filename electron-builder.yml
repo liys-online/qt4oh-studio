@@ -22,8 +22,22 @@ files:
 directories:
   output: release
 
+# macOS 配置（使用 zip 格式，避免下载 dmg-builder）
+mac:
+  extraResources:
+    - from: build/node-${arch}
+      to: node
+  target:
+    - target: zip
+      arch:
+        - arm64
+  category: public.app-category.developer-tools
+
 # Windows 配置
 win:
+  extraResources:
+    - from: build/node.exe
+      to: node.exe
   target:
     - target: nsis
       arch:
@@ -42,14 +56,12 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: qt4oh-studio
 
+# 禁用自动 rebuild native 模块（手动用系统 node 编译，确保 NMV 一致）
+npmRebuild: false
+
 # asar 打包（加速启动）
 asar: true
 asarUnpack:
   - node_modules/**/*
   - .next/**/*
   - public/**/*
-
-# 额外资源：将 node.exe 打包到 resources/ 目录
-extraResources:
-  - from: build/node.exe
-    to: node.exe

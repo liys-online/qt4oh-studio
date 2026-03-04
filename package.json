@@ -1,6 +1,8 @@
 {
   "name": "qt4oh-studio",
   "version": "0.1.0",
+  "description": "Qt for OpenHarmony Studio - Test runner and device management tool",
+  "author": "qt4oh",
   "private": true,
   "main": "electron-dist/main.js",
   "scripts": {
@@ -9,7 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "electron:dev": "concurrently \"next dev\" \"wait-on http://localhost:3000 && electron .\"",
-    "electron:build": "next build && tsc --project tsconfig.electron.json && electron-builder",
+    "electron:build": "cross-env ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ next build && tsc --project tsconfig.electron.json && electron-builder",
     "electron:compile": "tsc --project tsconfig.electron.json"
   },
   "dependencies": {

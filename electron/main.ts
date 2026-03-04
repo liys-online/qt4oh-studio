@@ -2,24 +2,36 @@ import { app, BrowserWindow, shell, Menu } from "electron";
 import { spawn, ChildProcess } from "child_process";
 import * as path from "path";
 import * as http from "http";
+import * as fs from "fs";
 
 const PORT = 3000;
 let mainWindow: BrowserWindow | null = null;
 let nextProcess: ChildProcess | null = null;
+
+/** 跨平台解析 Node.js 可执行文件路径 */
+function resolveNodeBin(): string {
+  const isWindows = process.platform === "win32";
+
+  if (app.isPackaged) {
+    if (isWindows) {
+      // Windows: 使用随包附带的 node.exe
+      return path.join(process.resourcesPath, "node.exe");
+    } else {
+      // macOS / Linux: 使用随包附带的 node，确保有执行权限
+      const nodePath = path.join(process.resourcesPath, "node");
+      try { fs.chmodSync(nodePath, 0o755); } catch { /* ignore */ }
+      return nodePath;
+    }
+  }
+  return "node"; // 开发模式
+}
 
 function startNextServer(): Promise<void> {
   return new Promise((resolve, reject) => {
     const isPackaged = app.isPackaged;
     const appPath = app.getAppPath();
 
-    // 打包后使用随附的 node.exe，开发时使用系统 node
-    let cmd: string;
-    if (isPackaged) {
-      // extraResources 会被复制到 resources/ 目录（app.asar 的同级目录）
-      cmd = path.join(process.resourcesPath, "node.exe");
-    } else {
-      cmd = "node";
-    }
+    const cmd = resolveNodeBin();
 
     // asar 内部文件无法被外部进程直接读取，需指向 app.asar.unpacked
     const unpackedPath = isPackaged
@@ -120,18 +132,39 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
-  // 关闭 Next.js 进程
-  if (nextProcess) {
-    nextProcess.kill();
-    nextProcess = null;
-  }
-  if (process.platform !== "darwin") {
+  if (process.platform === "darwin") {
+    // macOS：关闭窗口时保留 Next.js server，点击 Dock 图标可直接复用
+  } else {
+    // Windows / Linux：退出时一并终止 server
+    if (nextProcess) {
+      nextProcess.kill();
+      nextProcess = null;
+    }
     app.quit();
   }
 });
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
+    if (nextProcess) {
+      // server 仍在运行，直接创建窗口
+      createWindow();
+    } else {
+      // server 已停止（异常退出等情况），重新启动
+      startNextServer()
+        .then(() => createWindow())
+        .catch((err) => {
+          console.error("Failed to restart server:", err);
+          app.quit();
+        });
+    }
+  }
+});
+
+app.on("before-quit", () => {
+  // 真正退出时（Cmd+Q 或菜单退出）终止 server
+  if (nextProcess) {
+    nextProcess.kill();
+    nextProcess = null;
   }
 });
