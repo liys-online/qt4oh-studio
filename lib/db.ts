@@ -77,7 +77,15 @@ export async function runMigrations(): Promise<void> {
       t.string("start_time").notNullable();
       t.string("end_time").nullable();
       t.text("summary").nullable();         // JSON string
+      t.integer("user_id").nullable();      // 关联用户 ID（可为 null 表示历史数据）
     });
+  } else {
+    // 增量迁移：为已存在的 sessions 表补充 user_id 列
+    if (!(await db.schema.hasColumn("sessions", "user_id"))) {
+      await db.schema.alterTable("sessions", (t) => {
+        t.integer("user_id").nullable();
+      });
+    }
   }
 
   // test_results 表

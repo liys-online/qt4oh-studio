@@ -100,6 +100,8 @@ export interface RunOptions {
   filterPattern?: string;
   timeout?: number;
   skipInstall?: boolean;
+  /** 创建该会话的用户 ID */
+  userId?: number;
 }
 
 /** 启动测试会话，异步运行，返回 sessionId */
@@ -116,6 +118,7 @@ export async function startTestSession(options: RunOptions): Promise<string> {
     filterPattern,
     timeout = 300,
     skipInstall = false,
+    userId,
   } = options;
 
   // 确保日志目录存在（JSONL 日志）
@@ -135,6 +138,7 @@ export async function startTestSession(options: RunOptions): Promise<string> {
     status: "running",
     startTime: new Date().toISOString(),
     results: [],
+    userId,
   };
   await upsertSession(session);
   sessionStopFlags.set(sessionId, false);

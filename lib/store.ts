@@ -55,6 +55,8 @@ export interface TestSession {
   startTime: string;
   endTime?: string;
   results: TestResult[];
+  /** 创建该会话的用户 ID（null 表示历史/匿名数据） */
+  userId?: number;
   summary?: {
     total: number;
     success: number;
@@ -81,6 +83,7 @@ type DbSession = {
   start_time: string;
   end_time: string | null;
   summary: string | null;
+  user_id: number | null;
 };
 
 type DbResult = {
@@ -133,6 +136,7 @@ function rowToSession(s: DbSession, results: TestResult[]): TestSession {
     startTime: s.start_time,
     endTime: s.end_time ?? undefined,
     results,
+    userId: s.user_id ?? undefined,
     summary: s.summary ? JSON.parse(s.summary) : undefined,
   };
 }
@@ -157,10 +161,15 @@ export function stripSessionContent(session: TestSession): TestSession {
 
 // ─── 公开 API ────────────────────────────────────────────────────────────────
 
-export async function loadSessions(): Promise<TestSession[]> {
+export async function loadSessions(userId?: number, role?: string): Promise<TestSession[]> {
   await ensureMigrated();
   const db = getDb();
-  const rows = await db<DbSession>("sessions").select("*").orderBy("start_time", "desc");
+  let query = db<DbSession>("sessions").select("*").orderBy("start_time", "desc");
+  // 非管理员只能看自己的会话
+  if (userId !== undefined && role !== "admin") {
+    query = query.where("user_id", userId);
+  }
+  const rows = await query;
   const sessions: TestSession[] = [];
   for (const row of rows) {
     const results = await db<DbResult>("test_results")
@@ -177,12 +186,15 @@ export async function loadSessions(): Promise<TestSession[]> {
  * - DB 层不读取 report_content / output（大字段）
  * - 崩溃日志只保留文件名，剥离内容
  */
-export async function loadSessionsSummary(): Promise<TestSession[]> {
+export async function loadSessionsSummary(userId?: number, role?: string): Promise<TestSession[]> {
   await ensureMigrated();
   const db = getDb();
-  const sessionRows = await db<DbSession>("sessions")
-    .select("*")
-    .orderBy("start_time", "desc");
+  let sessionQuery = db<DbSession>("sessions").select("*").orderBy("start_time", "desc");
+  // 非管理员只能看自己的会话
+  if (userId !== undefined && role !== "admin") {
+    sessionQuery = sessionQuery.where("user_id", userId);
+  }
+  const sessionRows = await sessionQuery;
   if (sessionRows.length === 0) return [];
 
   const sessionIds = sessionRows.map((s) => s.id);
@@ -255,6 +267,7 @@ export async function upsertSession(session: TestSession): Promise<void> {
     start_time: session.startTime,
     end_time: session.endTime ?? null,
     summary: session.summary ? JSON.stringify(session.summary) : null,
+    user_id: session.userId ?? null,
   };
 
   const existing = await db<DbSession>("sessions").where("id", session.id).first();

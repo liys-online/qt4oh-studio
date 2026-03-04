@@ -3,10 +3,15 @@ import * as path from "path";
 import { startTestSession } from "@/lib/test-runner";
 import { loadSessionsSummary, deleteAllSessions } from "@/lib/store";
 import { UPLOAD_DIR } from "@/lib/paths";
+import { getSession } from "@/lib/auth";
 
-/** GET /api/tests - 获取所有测试会话列表（轻量化：不含大字段，不含已完成会话的 results） */
+/** GET /api/tests - 获取测试会话列表（轻量化：不含大字段，不含已完成会话的 results） */
 export async function GET() {
-  const sessions = await loadSessionsSummary();
+  const auth = await getSession();
+  const sessions = await loadSessionsSummary(
+    auth?.userId,
+    auth?.role,
+  );
   // 有 summary 的会话（已完成/已停止），前端用 summary 计算进度，不需要 results 数组
   // 运行中的会话返回精简的 results（只有 status），供进度条使用
   const lean = sessions.map((s) => ({
@@ -30,6 +35,7 @@ export async function DELETE() {
 /** POST /api/tests - 创建并启动新的测试会话 */
 export async function POST(req: NextRequest) {
   try {
+    const auth = await getSession();
     const body = await req.json();
     const {
       fileName,
@@ -58,6 +64,7 @@ export async function POST(req: NextRequest) {
       filterPattern,
       timeout,
       skipInstall,
+      userId: auth?.userId,
     });
 
     return NextResponse.json({ sessionId });
