@@ -319,6 +319,100 @@ export async function downloadTestReportContent(
   }
 }
 
+/**
+ * 在设备上执行非交互式 shell 命令
+ * @param deviceId 设备 ID
+ * @param command  要执行的命令字符串
+ * @param bundleName 可选，指定可调试应用包名（-b bundlename），在应用数据沙箱目录内执行
+ * @returns { stdout, stderr, exitCode }
+ */
+export async function runShellCommand(
+  deviceId: string,
+  command: string,
+  bundleName?: string
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  const bFlag = bundleName ? `-b ${bundleName} ` : "";
+  // 用双引号包裹命令，以支持管道、重定向等 shell 特性
+  const fullCmd = buildHdcCommand(`-t ${deviceId} shell ${bFlag}"${command.replace(/"/g, '\\"')}"`);
+  return new Promise((resolve) => {
+    exec(fullCmd, { windowsHide: true, timeout: 60000 }, (error, stdout, stderr) => {
+      resolve({
+        stdout: stdout ?? "",
+        stderr: stderr ?? "",
+        exitCode: error?.code ?? 0,
+      });
+    });
+  });
+}
+
+/**
+ * 截取设备屏幕画面
+ * 1. hdc shell snapshot_display -f /data/local/tmp/<uuid>.jpeg
+ * 2. hdc file recv /data/local/tmp/<uuid>.jpeg <localTmpFile>
+ * 返回本地临时文件路径（调用方负责删除），失败返回 null
+ */
+export async function takeScreenshot(deviceId: string): Promise<string | null> {
+  const filename = `screenshot_${uuidv4().replace(/-/g, "")}.jpeg`;
+  const remotePath = `/data/local/tmp/${filename}`;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "qt4oh-screenshot-"));
+  const localPath = path.join(tmpDir, filename);
+
+  // Step 1: 截图到设备临时目录
+  const snapResult = await runCommand(
+    buildHdcCommand(`-t ${deviceId} shell snapshot_display -f ${remotePath}`),
+    false
+  );
+  if (snapResult === null) {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    return null;
+  }
+
+  // Step 2: 从设备拉取文件到本地
+  const recvResult = await runCommand(
+    buildHdcCommand(`-t ${deviceId} file recv ${remotePath} ${localPath}`),
+    false
+  );
+  if (recvResult === null || !fs.existsSync(localPath)) {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    return null;
+  }
+
+  // 删除设备上的临时文件（忽略失败）
+  await runCommand(buildHdcCommand(`-t ${deviceId} shell rm -f ${remotePath}`), true);
+
+  return localPath;
+}
+
+/**
+ * 执行 power-shell 命令
+ * - wakeup:   亮屏
+ * - suspend:  熄屏
+ * - setmode:  设置电源模式 (mode: 600=正常 601=省电 602=性能 603=超级省电)
+ * - timeout:  自动熄屏时间 (timeoutMs: 毫秒数 | restore: true 恢复系统默认)
+ */
+export async function runPowerShell(
+  deviceId: string,
+  action: "wakeup" | "suspend" | "setmode" | "timeout",
+  opts?: { mode?: number; timeoutMs?: number; restore?: boolean }
+): Promise<{ success: boolean; output: string }> {
+  let subCmd: string;
+  switch (action) {
+    case "wakeup":   subCmd = "wakeup"; break;
+    case "suspend":  subCmd = "suspend"; break;
+    case "setmode":  subCmd = `setmode ${opts?.mode ?? 600}`; break;
+    case "timeout":
+      subCmd = opts?.restore ? "timeout -r" : `timeout -o ${opts?.timeoutMs ?? 15000}`;
+      break;
+  }
+  const cmd = buildHdcCommand(`-t ${deviceId} shell "power-shell ${subCmd}"`);
+  return new Promise((resolve) => {
+    exec(cmd, { windowsHide: true, timeout: 15000 }, (error, stdout, stderr) => {
+      const output = [stdout, stderr].filter(Boolean).join("\n").trim();
+      resolve({ success: !error, output: output || (error ? error.message : "执行成功") });
+    });
+  });
+}
+
 /** 使用 spawn 异步执行 hdc 命令，实时回调输出（用于 SSE 流式日志） */
 export function spawnCommand(
   cmd: string,
@@ -327,6 +421,57 @@ export function spawnCommand(
   onClose: (code: number) => void
 ) {
   const proc = spawn(cmd, args, { windowsHide: true });
+  proc.stdout.on("data", (chunk: Buffer) => onData(chunk.toString()));
+  proc.stderr.on("data", (chunk: Buffer) => onData(chunk.toString()));
+  proc.on("close", onClose);
+  return proc;
+}
+
+export interface HilogOptions {
+  /** -L 日志级别 D/I/W/E/F，多个用逗号分隔 */
+  level?: string;
+  /** -t 日志类型 app/core/init/kmsg */
+  type?: string;
+  /** -T tag 过滤 */
+  tag?: string;
+  /** -D domain 过滤 */
+  domain?: string;
+  /** -P pid 过滤 */
+  pid?: string;
+  /** -e 正则表达式过滤 */
+  regex?: string;
+  /** -x 非阻塞（读完即退出），默认 false（持续阻塞流） */
+  exit?: boolean;
+  /** -z 只读最后 n 行 */
+  tail?: number;
+  /** -a 只读前 n 行 */
+  head?: number;
+}
+
+/**
+ * 用 spawn 启动 hdc shell hilog，实时回调输出
+ * 支持全部 hilog 过滤参数
+ */
+export function spawnHilog(
+  deviceId: string,
+  options: HilogOptions,
+  onData: (data: string) => void,
+  onClose: (code: number) => void
+) {
+  const args: string[] = ["-t", deviceId, "shell", "hilog"];
+
+  if (options.exit) args.push("-x");
+  if (options.level) args.push("-L", options.level.toUpperCase());
+  if (options.type) args.push("-t", options.type);
+  if (options.tag) args.push("-T", options.tag);
+  if (options.domain) args.push("-D", options.domain);
+  if (options.pid) args.push("-P", options.pid);
+  if (options.regex) args.push("-e", options.regex);
+  if (options.tail != null) args.push("-z", String(options.tail));
+  if (options.head != null) args.push("-a", String(options.head));
+
+  const bin = HDC_BIN;
+  const proc = spawn(bin, args, { windowsHide: true });
   proc.stdout.on("data", (chunk: Buffer) => onData(chunk.toString()));
   proc.stderr.on("data", (chunk: Buffer) => onData(chunk.toString()));
   proc.on("close", onClose);
