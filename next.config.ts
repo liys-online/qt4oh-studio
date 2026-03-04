@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ["qt4oh-studio.liys.online"],
   experimental: {
     serverActions: {
       bodySizeLimit: "500mb",
@@ -14,6 +15,7 @@ const nextConfig: NextConfig = {
     "better-sqlite3",
     "mysql2",
     "pg",
+    "undici",
   ],
 };
 

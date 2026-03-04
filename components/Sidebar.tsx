@@ -2,7 +2,14 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+
+interface SessionUser {
+  username: string;
+  displayName: string;
+  role: string;
+}
 
 const navGroups = [
   {
@@ -92,7 +99,21 @@ const navGroups = [
 ];
 
 export function Sidebar() {
-  const pathname = usePathname();
+  const pathname  = usePathname();
+  const router    = useRouter();
+  const [user, setUser] = useState<SessionUser | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => d && setUser(d))
+      .catch(() => {});
+  }, []);
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+  }
 
   return (
     <aside style={{
@@ -174,6 +195,52 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
+
+      {/* User Info */}
+      {user && (
+        <div style={{
+          position: "relative", margin: "0 12px 8px", borderRadius: 12, padding: "10px 12px",
+          background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
+          display: "flex", alignItems: "center", gap: 10,
+        }}>
+          {/* 头像 + 名字 → 点击进入个人中心 */}
+          <Link href="/profile" style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0, textDecoration: "none" }}>
+            <div style={{
+              width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
+              background: "linear-gradient(135deg, #41CD52, #21a834)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 14, fontWeight: 700, color: "white",
+            }}>
+              {user.displayName.charAt(0)}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 13, fontWeight: 600, color: "white", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {user.displayName}
+              </p>
+              <p style={{ fontSize: 11, color: "rgba(148,163,184,0.7)", margin: 0 }}>
+                {user.role === "admin" ? "管理员" : "普通用户"}
+              </p>
+            </div>
+          </Link>
+          {/* Logout */}
+          <button
+            onClick={handleLogout}
+            title="退出登录"
+            style={{
+              flexShrink: 0, background: "none", border: "none", cursor: "pointer",
+              color: "rgba(148,163,184,0.6)", padding: 4, borderRadius: 6,
+              display: "flex", alignItems: "center",
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "#f87171"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "rgba(148,163,184,0.6)"; }}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ width: 16, height: 16 }}>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Footer */}
       <div style={{

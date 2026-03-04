@@ -117,6 +117,43 @@ export async function runMigrations(): Promise<void> {
       });
     }
   }
+
+  // users 表（用于登录认证）
+  if (!(await db.schema.hasTable("users"))) {
+    await db.schema.createTable("users", (t) => {
+      t.increments("id").primary();
+      t.string("username").notNullable().unique();
+      t.string("password_hash").notNullable();  // bcryptjs hash
+      t.string("display_name").notNullable();
+      t.string("role").notNullable().defaultTo("user"); // admin | user
+      t.string("created_at").notNullable();
+    });
+    // 写入默认管理员账号 admin / admin123
+    const bcrypt = await import("bcryptjs");
+    const hash = await bcrypt.hash("admin123", 10);
+    await db("users").insert({
+      username:      "admin",
+      password_hash: hash,
+      display_name:  "管理员",
+      role:          "admin",
+      created_at:    new Date().toISOString(),
+    });
+  }
+
+  // oauth_accounts 表（第三方登录绑定）
+  if (!(await db.schema.hasTable("oauth_accounts"))) {
+    await db.schema.createTable("oauth_accounts", (t) => {
+      t.increments("id").primary();
+      t.integer("user_id").notNullable().references("id").inTable("users").onDelete("CASCADE");
+      t.string("provider").notNullable();           // github | gitcode | huawei
+      t.string("provider_user_id").notNullable();   // 平台侧 UID
+      t.string("username").nullable();
+      t.string("display_name").nullable();
+      t.string("avatar_url").nullable();
+      t.string("created_at").notNullable();
+      t.unique(["provider", "provider_user_id"]);
+    });
+  }
 }
 
 // ─── 迁移状态（防止在同一进程中重复运行）────────────────────────────────────
