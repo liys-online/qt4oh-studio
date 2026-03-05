@@ -12,7 +12,7 @@ export interface SessionCardData {
   status: string;
   startTime: string;
   endTime?: string;
-  summary?: { total: number; success: number; failed: number; timeout: number; crash: number };
+  summary?: { total: number; success: number; failed: number; timeout: number; crash: number; interrupted?: number };
   results?: { status: string }[];
 }
 
@@ -34,6 +34,7 @@ export function SessionCard({ session: s, href, onDelete, deletingId }: SessionC
   const success = s.summary?.success ?? (s.results?.filter((r) => r.status === "success").length ?? 0);
   const timeout = s.summary?.timeout ?? 0;
   const crash = s.summary?.crash ?? 0;
+  const interrupted = s.summary?.interrupted ?? 0;
   const rate = total > 0 ? Math.round((success / total) * 100) : null;
 
   return (
@@ -89,6 +90,7 @@ export function SessionCard({ session: s, href, onDelete, deletingId }: SessionC
               <span className="text-xs font-semibold" style={{ color: "#10b981" }}>✓ {success}</span>
               {timeout > 0 && <span className="text-xs" style={{ color: "#f59e0b" }}>⏱ {timeout}</span>}
               {crash > 0 && <span className="text-xs" style={{ color: "#ef4444" }}>💥 {crash}</span>}
+              {interrupted > 0 && <span className="text-xs" style={{ color: "#b45309" }}>⚡ {interrupted}</span>}
               <span className="text-xs text-gray-400">/ {total}</span>
               {rate !== null && (
                 <span

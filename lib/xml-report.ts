@@ -35,6 +35,11 @@ export interface XmlReportResult {
   functions: XmlTestFunction[];
   /** 整体是否通过：所有函数均无 fail/error，且不含 xfail 降级 */
   passed: boolean;
+  /**
+   * XML 不完整（缺少 </TestCase> 闭合标签），说明测试进程被中断。
+   * 此时 functions 可能只包含已完成的部分结果。
+   */
+  incomplete: boolean;
 }
 
 /** 简易手写 XML 解析（避免引入额外依赖） */
@@ -83,6 +88,8 @@ export function parseXmlReport(xml: string): XmlReportResult {
   });
 
   const passed = functions.length > 0 && !functions.some((f) => f.hasFailed);
+  // 如果 XML 缺少 </TestCase> 闭合标签，说明进程被中途杀死
+  const incomplete = xml.trim().length > 0 && !xml.includes("</TestCase>");
 
-  return { testCaseName, qtVersion, totalDurationMs, functions, passed };
+  return { testCaseName, qtVersion, totalDurationMs, functions, passed, incomplete };
 }

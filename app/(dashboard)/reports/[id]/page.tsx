@@ -12,7 +12,7 @@ interface TestResult {
   module: string;
   arch: string;
   path: string;
-  status: "success" | "timeout" | "crash" | "failed" | "pending" | "running";
+  status: "success" | "timeout" | "crash" | "failed" | "pending" | "running" | "interrupted";
   duration?: number;
   crashLogs?: { name: string; content: string }[];
   reportFile?: string;
@@ -41,6 +41,7 @@ interface Summary {
   timeout: number;
   crash: number;
   failed: number;
+  interrupted?: number;
 }
 
 interface Session {
@@ -226,7 +227,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
   }
 
   const modules = ["all", ...Array.from(new Set(session.results.map((r) => r.module)))];
-  const statusFilters = ["all", "success", "timeout", "crash", "failed"];
+  const statusFilters = ["all", "success", "timeout", "crash", "failed", "interrupted"];
 
   const filtered = session.results.filter((r) => {
     const matchStatus = filterStatus === "all" || r.status === filterStatus;
@@ -356,13 +357,14 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
 
       {/* 统计卡片 */}
       {summary && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12 }}>
           {[
             { label: "总计", value: summary.total, color: "#1d252c", accent: "#41CD52" },
             { label: "通过", value: summary.success, color: "#059669", accent: "#10b981" },
             { label: "超时", value: summary.timeout, color: "#d97706", accent: "#f59e0b" },
             { label: "崩溃", value: summary.crash, color: "#dc2626", accent: "#ef4444" },
             { label: "失败", value: summary.failed, color: "#dc2626", accent: "#ef4444" },
+            { label: "中断", value: summary.interrupted ?? 0, color: "#b45309", accent: "#f59e0b" },
           ].map((item) => (
             <div key={item.label} style={{ ...glass, padding: "14px 12px", textAlign: "center" }}>
               <div style={{ fontSize: 24, fontWeight: 800, color: item.color, lineHeight: 1 }}>{item.value}</div>
@@ -393,6 +395,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
               { label: "超时", value: summary.timeout, color: "#f59e0b" },
               { label: "崩溃", value: summary.crash, color: "#ef4444" },
               { label: "失败", value: summary.failed, color: "#ef4444" },
+              { label: "中断", value: summary.interrupted ?? 0, color: "#b45309" },
             ].map((seg) => (
               <div key={seg.label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#64748b" }}>
                 <span style={{ width: 8, height: 8, borderRadius: "50%", background: seg.color, display: "inline-block" }} />

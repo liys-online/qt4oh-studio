@@ -9,7 +9,7 @@ interface TestResult {
   name: string;
   arch: string;
   module: string;
-  status: "pending" | "running" | "success" | "failed" | "timeout" | "crash";
+  status: "pending" | "running" | "success" | "failed" | "timeout" | "crash" | "interrupted";
   duration?: number;
   output?: string;
 }
@@ -29,6 +29,7 @@ interface Session {
     failed: number;
     timeout: number;
     crash: number;
+    interrupted: number;
   };
 }
 
@@ -38,12 +39,13 @@ interface LogEntry {
 }
 
 const statusStyle: Record<string, { bg: string; text: string; label: string }> = {
-  pending:   { bg: "rgba(148,163,184,0.15)", text: "#94a3b8", label: "等待" },
-  running:   { bg: "rgba(65,205,82,0.12)",  text: "#1d7a2e",  label: "运行中" },
-  success:   { bg: "rgba(16,185,129,0.12)",  text: "#059669",  label: "通过" },
-  failed:    { bg: "rgba(239,68,68,0.12)",   text: "#dc2626",  label: "失败" },
-  timeout:   { bg: "rgba(245,158,11,0.12)",  text: "#d97706",  label: "超时" },
-  crash:     { bg: "rgba(239,68,68,0.15)",   text: "#b91c1c",  label: "崩溃" },
+  pending:     { bg: "rgba(148,163,184,0.15)", text: "#94a3b8", label: "等待" },
+  running:     { bg: "rgba(65,205,82,0.12)",  text: "#1d7a2e",  label: "运行中" },
+  success:     { bg: "rgba(16,185,129,0.12)",  text: "#059669",  label: "通过" },
+  failed:      { bg: "rgba(239,68,68,0.12)",   text: "#dc2626",  label: "失败" },
+  timeout:     { bg: "rgba(245,158,11,0.12)",  text: "#d97706",  label: "超时" },
+  crash:       { bg: "rgba(239,68,68,0.15)",   text: "#b91c1c",  label: "崩溃" },
+  interrupted: { bg: "rgba(99,102,241,0.12)",  text: "#4f46e5",  label: "中断" },
 };
 
 export default function SessionPage({ params }: { params: Promise<{ id: string }> }) {
@@ -226,7 +228,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   ).length;
   const total = session?.results.length ?? 0;
 
-  const statusFilters = ["all", "success", "timeout", "crash", "failed"];
+  const statusFilters = ["all", "success", "timeout", "crash", "failed", "interrupted"];
   const modules = ["all", ...Array.from(new Set((session?.results ?? []).map((r) => r.module)))];
   const baseResults = (session?.results ?? []).filter((r) => r.status !== "pending");
   const filteredResults = baseResults.filter((r) => {
@@ -388,10 +390,11 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
             <>
               <div className="flex rounded-full overflow-hidden h-2.5 mb-3" style={{ background: "rgba(0,0,0,0.06)" }}>
                 {[
-                  { value: summary.success, color: "#10b981" },
-                  { value: summary.timeout, color: "#f59e0b" },
-                  { value: summary.crash,   color: "#ef4444" },
-                  { value: summary.failed,  color: "#dc2626" },
+                  { value: summary.success,     color: "#10b981" },
+                  { value: summary.timeout,     color: "#f59e0b" },
+                  { value: summary.crash,       color: "#ef4444" },
+                  { value: summary.failed,      color: "#dc2626" },
+                  { value: summary.interrupted ?? 0, color: "#6366f1" },
                 ].map((seg, i) => {
                   const pct = (seg.value / total) * 100;
                   return pct > 0 ? (
@@ -404,6 +407,9 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
                 <span style={{ color: "#f59e0b" }}>⏱ {summary.timeout} 超时</span>
                 <span style={{ color: "#ef4444" }}>💥 {summary.crash} 崩溃</span>
                 <span style={{ color: "#dc2626" }}>✗ {summary.failed} 失败</span>
+                {(summary.interrupted ?? 0) > 0 && (
+                  <span style={{ color: "#6366f1" }}>■ {summary.interrupted} 中断</span>
+                )}
               </div>
             </>
           ) : (
@@ -538,7 +544,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
                       <span className="text-xs text-gray-400 shrink-0">{result.duration}s</span>
                     )}
                     {/* 重跑按钮：失败/超时/崩溃 且 无全局运行中时显示 */}
-                    {(result.status === "failed" || result.status === "timeout" || result.status === "crash") &&
+                    {(result.status === "failed" || result.status === "timeout" || result.status === "crash" || result.status === "interrupted") &&
                       session?.status !== "running" && (
                       <button
                         onClick={(e) => { e.stopPropagation(); handleRerun(result.id, newHapPath || undefined); }}

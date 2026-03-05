@@ -319,9 +319,12 @@ async function runSession(
       emit(sessionId, `[INFO] XML 报告已下载: ${reportFile}`);
       try {
         const xmlResult = parseXmlReport(xmlContent);
-        // 测试函数有任何失败则覆盖状态为 failed（崩溃优先级更高）
+        // XML 不完整→测试被中断；否则根据 passed 判定成败
         if (finalStatus !== "crash" && finalStatus !== "timeout") {
-          finalStatus = xmlResult.passed ? "success" : "failed";
+          finalStatus = xmlResult.incomplete ? "interrupted" : (xmlResult.passed ? "success" : "failed");
+        }
+        if (xmlResult.incomplete) {
+          emit(sessionId, `[WARN] XML 报告不完整，判定测试被中断`);
         }
         const failedFuncs = xmlResult.functions.filter((f) => f.hasFailed);
         if (failedFuncs.length > 0) {
@@ -552,7 +555,10 @@ async function _rerunSingleTestAsync(
     try {
       const xmlResult = parseXmlReport(xmlContent);
       if (finalStatus !== "crash" && finalStatus !== "timeout") {
-        finalStatus = xmlResult.passed ? "success" : "failed";
+        finalStatus = xmlResult.incomplete ? "interrupted" : (xmlResult.passed ? "success" : "failed");
+      }
+      if (xmlResult.incomplete) {
+        emit(sessionId, `[WARN] XML 报告不完整，判定测试被中断`);
       }
       const failedFuncs = xmlResult.functions.filter((f) => f.hasFailed);
       if (failedFuncs.length > 0) {

@@ -10,7 +10,7 @@
 
 import { getDb, ensureMigrated } from "./db";
 
-export type TestStatus = "pending" | "running" | "success" | "timeout" | "crash" | "failed";
+export type TestStatus = "pending" | "running" | "success" | "timeout" | "crash" | "failed" | "interrupted";
 
 /** 单条崩溃日志（文件名 + 原始内容，存入数据库，不落盘） */
 export interface CrashLog {
@@ -63,6 +63,7 @@ export interface TestSession {
     failed: number;
     timeout: number;
     crash: number;
+    interrupted: number;
   };
 }
 
@@ -364,6 +365,7 @@ export function computeSummary(results: TestResult[]) {
     failed: results.filter((r) => r.status === "failed").length,
     timeout: results.filter((r) => r.status === "timeout").length,
     crash: results.filter((r) => r.status === "crash").length,
+    interrupted: results.filter((r) => r.status === "interrupted").length,
   };
 }
 

@@ -23,7 +23,7 @@ interface SessionSummary {
   status: "running" | "completed" | "stopped";
   startTime: string;
   endTime?: string;
-  summary?: { total: number; success: number; failed: number; timeout: number; crash: number };
+  summary?: { total: number; success: number; failed: number; timeout: number; crash: number; interrupted: number };
   results: { status: string }[];
 }
 

@@ -14,6 +14,7 @@ export async function GET() {
     totalFailed: 0,
     totalTimeout: 0,
     totalCrash: 0,
+    totalInterrupted: 0,
   };
 
   for (const s of sessions) {
@@ -23,6 +24,7 @@ export async function GET() {
     overview.totalFailed += summary.failed;
     overview.totalTimeout += summary.timeout;
     overview.totalCrash += summary.crash;
+    overview.totalInterrupted += summary.interrupted ?? 0;
   }
 
   // 崩溃日志文件名列表（从 DB 自动聚合，去重）
