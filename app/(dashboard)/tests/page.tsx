@@ -77,6 +77,25 @@ export default function TestsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletingAll, setDeletingAll] = useState(false);
 
+  // GitCode Releases
+  const [hapSource, setHapSource] = useState<"local" | "gitcode">("gitcode");
+  interface GcRelease {
+    tag_name: string;
+    name: string;
+    body: string;
+    created_at: string;
+    prerelease: boolean;
+    hapAssets: { name: string; browser_download_url: string; type: string }[];
+  }
+  interface GcCachedFile { name: string; size: number; mtime: string; }
+  const [gcReleases, setGcReleases] = useState<GcRelease[]>([]);
+  const [gcLoading, setGcLoading] = useState(false);
+  const [gcError, setGcError] = useState("");
+  const [gcExpanded, setGcExpanded] = useState<string | null>(null);
+  const [gcDownloadProgress, setGcDownloadProgress] = useState<{ fileName: string; p: number; dl: number; total: number } | null>(null);
+  const [gcCachedFiles, setGcCachedFiles] = useState<GcCachedFile[]>([]);
+  const [gcDeletingFile, setGcDeletingFile] = useState("");
+
   const selectDevice = (id: string) => setSelectedDevice(id);
 
   const handleDeleteAll = async () => {
@@ -94,6 +113,9 @@ export default function TestsPage() {
     fetch("/api/tests")
       .then((r) => r.json())
       .then((d) => setSessions(d.sessions || []));
+    // 默认展示 GitCode 选项卡，提前加载数据
+    fetchGcReleases();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 有运行中的会话时每 3s 刷新一次列表以更新进度
@@ -165,6 +187,96 @@ export default function TestsPage() {
     setDragging(false);
     const file = e.dataTransfer.files?.[0];
     if (file) uploadFile(file);
+  };
+
+  const fmtBytes = (n: number) => {
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    if (n < 1024 ** 3) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+    return `${(n / 1024 ** 3).toFixed(2)} GB`;
+  };
+
+  const fetchGcCachedFiles = async () => {
+    try {
+      const res = await fetch("/api/gitcode-releases/download");
+      const data = await res.json();
+      if (res.ok) setGcCachedFiles(data.files || []);
+    } catch { /* ignore */ }
+  };
+
+  const fetchGcReleases = async () => {
+    setGcLoading(true);
+    setGcError("");
+    try {
+      const [relRes] = await Promise.all([
+        fetch("/api/gitcode-releases"),
+        fetchGcCachedFiles(),
+      ]);
+      const data = await relRes.json();
+      if (!relRes.ok) throw new Error(data.error || "获取 releases 失败");
+      setGcReleases(data.releases || []);
+      if (data.releases?.length > 0) setGcExpanded(data.releases[0].tag_name);
+    } catch (e: unknown) {
+      setGcError((e as Error).message);
+    } finally {
+      setGcLoading(false);
+    }
+  };
+
+  const handleGcDownload = async (url: string, fileName: string) => {
+    setUploadError("");
+    setGcDownloadProgress({ fileName, p: 0, dl: 0, total: 0 });
+    try {
+      const res = await fetch("/api/gitcode-releases/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, fileName }),
+      });
+      if (!res.body) throw new Error("无响应流");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const evt = JSON.parse(line.slice(6)) as {
+            status: string; p?: number; dl?: number; total?: number;
+            data?: HapInfo & { size?: number }; message?: string;
+          };
+          if (evt.status === "progress") {
+            setGcDownloadProgress({ fileName, p: evt.p ?? 0, dl: evt.dl ?? 0, total: evt.total ?? 0 });
+          } else if (evt.status === "done" || evt.status === "exists") {
+            if (evt.data) setHapInfo(evt.data);
+            setGcDownloadProgress(null);
+            await fetchGcCachedFiles();
+          } else if (evt.status === "error") {
+            throw new Error(evt.message || "下载失败");
+          }
+        }
+      }
+    } catch (e: unknown) {
+      setUploadError((e as Error).message);
+      setGcDownloadProgress(null);
+    }
+  };
+
+  const handleGcDeleteFile = async (fileName: string) => {
+    if (!confirm(`确认删除已下载的 ${fileName}？`)) return;
+    setGcDeletingFile(fileName);
+    try {
+      const res = await fetch(`/api/gitcode-releases/download?file=${encodeURIComponent(fileName)}`, { method: "DELETE" });
+      if (!res.ok) { const d = await res.json(); alert(d.error || "删除失败"); return; }
+      setGcCachedFiles((prev) => prev.filter((f) => f.name !== fileName));
+      if (hapInfo?.fileName === fileName) setHapInfo(null);
+    } catch (e: unknown) {
+      alert((e as Error).message);
+    } finally {
+      setGcDeletingFile("");
+    }
   };
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
@@ -354,67 +466,259 @@ export default function TestsPage() {
 
             {/* Step 2: 上传 HAP */}
             <div className="rounded-2xl p-5 shadow-sm" style={cardStyle}>
+              {/* 标题 + Tab 切换 */}
               <div className="flex items-center gap-3 mb-4">
                 <StepBadge n={2} active={step1Done && !step2Done} done={step2Done} />
-                <h2 className="text-sm font-semibold text-gray-800">上传 HAP 包</h2>
+                <h2 className="text-sm font-semibold text-gray-800">选择 HAP 包</h2>
+                <div className="ml-auto flex rounded-lg overflow-hidden" style={{ border: "1.5px solid rgba(0,0,0,0.1)" }}>
+                  {(["gitcode", "local"] as const).map((src) => (
+                    <button
+                      key={src}
+                      onClick={() => {
+                        setHapSource(src);
+                        if (src === "gitcode") {
+                          fetchGcCachedFiles();
+                          if (gcReleases.length === 0 && !gcLoading) fetchGcReleases();
+                        }
+                      }}
+                      className="px-3 py-1 text-xs font-medium transition-all"
+                      style={
+                        hapSource === src
+                          ? { background: "linear-gradient(135deg, #41CD52, #21a834)", color: "white" }
+                          : { background: "transparent", color: "#64748b" }
+                      }
+                    >
+                      {src === "local" ? "本地上传" : "GitCode"}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <input ref={fileInputRef} type="file" accept=".hap" className="hidden" onChange={handleFileChange} />
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-                onDragLeave={() => setDragging(false)}
-                onDrop={handleDrop}
-                className="rounded-xl p-6 cursor-pointer transition-all"
-                style={
-                  dragging
-                    ? { border: "2px dashed #41CD52", background: "rgba(65,205,82,0.06)" }
-                    : hapInfo
-                    ? { border: "2px dashed rgba(16,185,129,0.4)", background: "rgba(16,185,129,0.04)" }
-                    : { border: "2px dashed rgba(65,205,82,0.3)", background: "rgba(65,205,82,0.02)" }
-                }
-              >
-                {uploading ? (
-                  <div className="flex flex-col sm:flex-row items-center gap-4">
-                    <Spinner size="md" />
-                    <p className="text-sm text-gray-500">解析 HAP 中，请稍候...</p>
+
+              {hapSource === "local" ? (
+                <>
+                  <input ref={fileInputRef} type="file" accept=".hap" className="hidden" onChange={handleFileChange} />
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+                    onDragLeave={() => setDragging(false)}
+                    onDrop={handleDrop}
+                    className="rounded-xl p-6 cursor-pointer transition-all"
+                    style={
+                      dragging
+                        ? { border: "2px dashed #41CD52", background: "rgba(65,205,82,0.06)" }
+                        : hapInfo
+                        ? { border: "2px dashed rgba(16,185,129,0.4)", background: "rgba(16,185,129,0.04)" }
+                        : { border: "2px dashed rgba(65,205,82,0.3)", background: "rgba(65,205,82,0.02)" }
+                    }
+                  >
+                    {uploading ? (
+                      <div className="flex flex-col sm:flex-row items-center gap-4">
+                        <Spinner size="md" />
+                        <p className="text-sm text-gray-500">解析 HAP 中，请稍候...</p>
+                      </div>
+                    ) : hapInfo ? (
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg, #10b981, #059669)" }}>
+                          <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-800 truncate">{hapInfo.fileName}</p>
+                          <p className="text-xs text-gray-400">找到 <span style={{ color: "#1d7a2e" }} className="font-bold">{hapInfo.totalLibs}</span> 个测试库 · 点击重新上传</p>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 sm:ml-auto">
+                          {hapInfo.archs.map((a) => (
+                            <span key={a} className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(65,205,82,0.12)", color: "#1d7a2e" }}>{a}</span>
+                          ))}
+                          {hapInfo.modules.slice(0, 4).map((m) => (
+                            <span key={m} className="text-xs px-2 py-0.5 rounded-full font-mono" style={{ background: "rgba(0,0,0,0.05)", color: "#64748b" }}>{m}</span>
+                          ))}
+                          {hapInfo.modules.length > 4 && (
+                            <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(0,0,0,0.05)", color: "#94a3b8" }}>+{hapInfo.modules.length - 4} 个模块</span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg, rgba(65,205,82,0.12), rgba(33,168,52,0.1))" }}>
+                          <svg className="w-6 h-6" style={{ color: "#41CD52" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-600">拖放或 <span style={{ color: "#1d7a2e" }} className="font-semibold">点击上传</span> HAP 文件</p>
+                          <p className="text-xs text-gray-400 mt-1">支持 entry-default-signed.hap</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ) : hapInfo ? (
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg, #10b981, #059669)" }}>
-                      <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </>
+              ) : (
+                /* GitCode Releases 面板 */
+                <div className="space-y-3">
+                  {/* ── 下载进度条 ─────────────────────────────────────── */}
+                  {gcDownloadProgress && (
+                    <div className="rounded-xl p-3 space-y-2" style={{ background: "rgba(65,205,82,0.05)", border: "1.5px solid rgba(65,205,82,0.25)" }}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-gray-700 truncate max-w-[60%]">{gcDownloadProgress.fileName}</span>
+                        <span className="text-xs font-bold" style={{ color: "#1d7a2e" }}>{gcDownloadProgress.p}%</span>
+                      </div>
+                      <div className="w-full h-1.5 rounded-full" style={{ background: "rgba(0,0,0,0.08)" }}>
+                        <div className="h-1.5 rounded-full transition-all" style={{ width: `${gcDownloadProgress.p}%`, background: "linear-gradient(90deg, #41CD52, #21a834)" }} />
+                      </div>
+                      <p className="text-xs text-gray-400">
+                        {gcDownloadProgress.total > 0
+                          ? `${fmtBytes(gcDownloadProgress.dl)} / ${fmtBytes(gcDownloadProgress.total)}`
+                          : `已下载 ${fmtBytes(gcDownloadProgress.dl)}`}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* ── 已下载缓存文件列表 ──────────────────────────────── */}
+                  {gcCachedFiles.length > 0 && (
+                    <div className="rounded-xl overflow-hidden" style={{ border: "1.5px solid rgba(16,185,129,0.25)" }}>
+                      <div className="px-4 py-2.5 flex items-center gap-2" style={{ background: "rgba(16,185,129,0.05)", borderBottom: "1px solid rgba(16,185,129,0.15)" }}>
+                        <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                        </svg>
+                        <span className="text-xs font-semibold text-emerald-700">已下载缓存</span>
+                        <span className="text-xs text-gray-400 ml-1">{gcCachedFiles.length} 个文件</span>
+                      </div>
+                      <div className="divide-y divide-black/5">
+                        {gcCachedFiles.map((f) => {
+                          const isSelected = hapInfo?.fileName === f.name;
+                          const isDeleting = gcDeletingFile === f.name;
+                          return (
+                            <div key={f.name} className="flex items-center gap-3 px-4 py-2.5" style={{ background: isSelected ? "rgba(16,185,129,0.04)" : "white" }}>
+                              <svg className="w-4 h-4 shrink-0" style={{ color: isSelected ? "#10b981" : "#64748b" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-mono text-gray-800 truncate">{f.name}</p>
+                                <p className="text-xs text-gray-400">{fmtBytes(f.size)}</p>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {isSelected ? (
+                                  <span className="text-xs font-medium px-2 py-0.5 rounded-md" style={{ background: "rgba(16,185,129,0.12)", color: "#10b981" }}>已选中</span>
+                                ) : (
+                                  <button
+                                    onClick={() => handleGcDownload("", f.name)}
+                                    disabled={!!gcDownloadProgress || isDeleting}
+                                    className="text-xs font-medium px-2 py-1 rounded-lg transition-all disabled:opacity-40"
+                                    style={{ background: "rgba(65,205,82,0.1)", color: "#1d7a2e", border: "1px solid rgba(65,205,82,0.3)" }}
+                                  >
+                                    选择
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleGcDeleteFile(f.name)}
+                                  disabled={isDeleting || !!gcDownloadProgress}
+                                  className="p-1 rounded-lg transition-all disabled:opacity-40 hover:bg-red-50"
+                                  title="删除"
+                                >
+                                  {isDeleting ? <Spinner size="sm" /> : (
+                                    <svg className="w-3.5 h-3.5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Releases 列表 ────────────────────────────────────── */}
+                  {gcLoading ? (
+                    <div className="flex items-center gap-3 py-4 justify-center">
+                      <Spinner size="sm" />
+                      <span className="text-xs text-gray-400">加载 releases 列表...</span>
+                    </div>
+                  ) : gcError ? (
+                    <div className="rounded-xl p-4" style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)" }}>
+                      <p className="text-xs text-red-500">{gcError}</p>
+                      <button onClick={fetchGcReleases} className="mt-2 text-xs font-medium" style={{ color: "#41CD52" }}>重试</button>
+                    </div>
+                  ) : gcReleases.length === 0 ? (
+                    <div className="flex flex-col items-center gap-2 py-8 text-gray-400">
+                      <svg className="w-8 h-8 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                       </svg>
+                      <p className="text-xs">暂无可用的 HAP 发布包</p>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-800 truncate">{hapInfo.fileName}</p>
-                      <p className="text-xs text-gray-400">找到 <span style={{ color: "#1d7a2e" }} className="font-bold">{hapInfo.totalLibs}</span> 个测试库 · 点击重新上传</p>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 sm:ml-auto">
-                      {hapInfo.archs.map((a) => (
-                        <span key={a} className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(65,205,82,0.12)", color: "#1d7a2e" }}>{a}</span>
-                      ))}
-                      {hapInfo.modules.slice(0, 4).map((m) => (
-                        <span key={m} className="text-xs px-2 py-0.5 rounded-full font-mono" style={{ background: "rgba(0,0,0,0.05)", color: "#64748b" }}>{m}</span>
-                      ))}
-                      {hapInfo.modules.length > 4 && (
-                        <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(0,0,0,0.05)", color: "#94a3b8" }}>+{hapInfo.modules.length - 4} 个模块</span>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg, rgba(65,205,82,0.12), rgba(33,168,52,0.1))" }}>
-                      <svg className="w-6 h-6" style={{ color: "#41CD52" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">拖放或 <span style={{ color: "#1d7a2e" }} className="font-semibold">点击上传</span> HAP 文件</p>
-                      <p className="text-xs text-gray-400 mt-1">支持 entry-default-signed.hap</p>
-                    </div>
-                  </div>
-                )}
-              </div>
+                  ) : (
+                    gcReleases.map((release) => (
+                      <div key={release.tag_name} className="rounded-xl overflow-hidden" style={{ border: "1.5px solid rgba(0,0,0,0.08)" }}>
+                        <button
+                          className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
+                          style={{ background: gcExpanded === release.tag_name ? "rgba(65,205,82,0.06)" : "rgba(0,0,0,0.02)" }}
+                          onClick={() => setGcExpanded(gcExpanded === release.tag_name ? null : release.tag_name)}
+                        >
+                          <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg, #41CD52, #21a834)" }}>
+                            <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-gray-800">{release.name || release.tag_name}</p>
+                            <p className="text-xs text-gray-400">{new Date(release.created_at).toLocaleDateString("zh-CN")} · {release.hapAssets.length} 个 HAP</p>
+                          </div>
+                          <svg
+                            className="w-4 h-4 text-gray-400 shrink-0 transition-transform"
+                            style={{ transform: gcExpanded === release.tag_name ? "rotate(180deg)" : "none" }}
+                            fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                        {gcExpanded === release.tag_name && (
+                          <div className="px-4 pb-3 pt-2 space-y-2" style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+                            {release.body && (
+                              <p className="text-xs text-gray-500 whitespace-pre-wrap mb-1">{release.body}</p>
+                            )}
+                            {release.hapAssets.map((asset) => {
+                              const isCached = gcCachedFiles.some((f) => f.name === asset.name);
+                              const isActiveDownload = gcDownloadProgress?.fileName === asset.name;
+                              const isSelected = hapInfo?.fileName === asset.name;
+                              return (
+                                <div key={asset.name} className="flex items-center gap-3 rounded-lg px-3 py-2.5"
+                                  style={{ background: isSelected ? "rgba(16,185,129,0.06)" : isCached ? "rgba(65,205,82,0.03)" : "rgba(0,0,0,0.03)", border: isSelected ? "1px solid rgba(16,185,129,0.3)" : isCached ? "1px solid rgba(65,205,82,0.2)" : "1px solid rgba(0,0,0,0.06)" }}
+                                >
+                                  <svg className="w-4 h-4 shrink-0" style={{ color: isSelected ? "#10b981" : isCached ? "#41CD52" : "#64748b" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                  <span className="flex-1 text-xs font-mono text-gray-700 truncate">{asset.name}</span>
+                                  {isCached && !isSelected && (
+                                    <span className="text-xs px-1.5 py-0.5 rounded-md shrink-0" style={{ background: "rgba(65,205,82,0.1)", color: "#1d7a2e" }}>已缓存</span>
+                                  )}
+                                  {isSelected ? (
+                                    <span className="text-xs font-medium shrink-0" style={{ color: "#10b981" }}>已选中</span>
+                                  ) : isActiveDownload ? (
+                                    <span className="text-xs text-gray-400 shrink-0">{gcDownloadProgress!.p}%</span>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleGcDownload(isCached ? "" : asset.browser_download_url, asset.name)}
+                                      disabled={!!gcDownloadProgress}
+                                      className="text-xs font-medium px-2.5 py-1 rounded-lg transition-all disabled:opacity-40 shrink-0"
+                                      style={{ background: "linear-gradient(135deg, rgba(65,205,82,0.12), rgba(33,168,52,0.1))", color: "#1d7a2e", border: "1px solid rgba(65,205,82,0.3)" }}
+                                    >
+                                      {isCached ? "选择" : "下载"}
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
               {uploadError && (
                 <p className="mt-2 text-xs text-red-500 flex items-center gap-1.5">
                   <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
