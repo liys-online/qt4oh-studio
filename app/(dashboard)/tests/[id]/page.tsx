@@ -3,6 +3,7 @@
 import { use, useEffect, useRef, useState } from "react";
 import { Spinner } from "@heroui/react";
 import Link from "next/link";
+import TestResultsList from "@/components/TestResultsList";
 
 interface TestResult {
   id: string;
@@ -38,16 +39,6 @@ interface LogEntry {
   message: string;
 }
 
-const statusStyle: Record<string, { bg: string; text: string; label: string }> = {
-  pending:     { bg: "rgba(148,163,184,0.15)", text: "#94a3b8", label: "等待" },
-  running:     { bg: "rgba(65,205,82,0.12)",  text: "#1d7a2e",  label: "运行中" },
-  success:     { bg: "rgba(16,185,129,0.12)",  text: "#059669",  label: "通过" },
-  failed:      { bg: "rgba(239,68,68,0.12)",   text: "#dc2626",  label: "失败" },
-  timeout:     { bg: "rgba(245,158,11,0.12)",  text: "#d97706",  label: "超时" },
-  crash:       { bg: "rgba(239,68,68,0.15)",   text: "#b91c1c",  label: "崩溃" },
-  interrupted: { bg: "rgba(99,102,241,0.12)",  text: "#4f46e5",  label: "中断" },
-};
-
 export default function SessionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [session, setSession] = useState<Session | null>(null);
@@ -58,8 +49,6 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   const [testCmdLogs, setTestCmdLogs] = useState<Record<string, LogEntry[]>>({});
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [logCollapsed, setLogCollapsed] = useState(false);
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [filterModule, setFilterModule] = useState("all");
   // 重跑相关
   const [rerunningId, setRerunningId] = useState<string | null>(null);
   const [showChangeHap, setShowChangeHap] = useState(false);
@@ -248,15 +237,6 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
     (r) => r.status !== "pending" && r.status !== "running"
   ).length;
   const total = session?.results.length ?? 0;
-
-  const statusFilters = ["all", "success", "timeout", "crash", "failed", "interrupted"];
-  const modules = ["all", ...Array.from(new Set((session?.results ?? []).map((r) => r.module)))];
-  const baseResults = (session?.results ?? []).filter((r) => r.status !== "pending");
-  const filteredResults = baseResults.filter((r) => {
-    const matchStatus = filterStatus === "all" || r.status === filterStatus;
-    const matchModule = filterModule === "all" || r.module === filterModule;
-    return matchStatus && matchModule;
-  });
 
   const cardStyle = {
     background: "rgba(255,255,255,0.85)",
@@ -447,205 +427,24 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
         </div>
       )}
 
-      {/* 测试结果列表 - 全宽 */}
-      <div className="rounded-2xl p-5 shadow-sm flex flex-col flex-1 min-h-0" style={cardStyle}>
-        <div className="flex items-center justify-between gap-3 mb-3">
-          <h2 className="text-sm font-semibold text-gray-800">
-            测试结果
-            {total > 0 && <span className="text-gray-400 font-normal ml-1">({completed}/{total})</span>}
-          </h2>
-          <span className="text-xs text-gray-400">显示 {filteredResults.length} 条</span>
-        </div>
-
-        {/* 分类过滤器 */}
-        <div className="flex flex-wrap gap-2 mb-3">
-          <div className="flex gap-2 flex-wrap">
-            {statusFilters.map((s) => {
-              const active = filterStatus === s;
-              const style = s !== "all" ? statusStyle[s] : null;
-              return (
-                <button
-                  key={s}
-                  onClick={() => setFilterStatus(s)}
-                  className="text-xs px-3 py-1 rounded-full font-semibold transition-all"
-                  style={{
-                    border: "none",
-                    cursor: "pointer",
-                    background: active
-                      ? (style ? style.bg : "rgba(65,205,82,0.15)")
-                      : "rgba(255,255,255,0.7)",
-                    color: active
-                      ? (style ? style.text : "#1d7a2e")
-                      : "#94a3b8",
-                    boxShadow: active ? "0 2px 8px rgba(0,0,0,0.08)" : "none",
-                  }}
-                >
-                  {s === "all" ? "全部" : statusStyle[s]?.label ?? s}
-                </button>
-              );
-            })}
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            {modules.map((m) => {
-              const active = filterModule === m;
-              return (
-                <button
-                  key={m}
-                  onClick={() => setFilterModule(m)}
-                  className="text-xs px-3 py-1 rounded-full font-medium transition-all"
-                  style={{
-                    border: "none",
-                    cursor: "pointer",
-                    background: active ? "rgba(65,205,82,0.15)" : "rgba(255,255,255,0.7)",
-                    color: active ? "#1d7a2e" : "#94a3b8",
-                    boxShadow: active ? "0 2px 8px rgba(0,0,0,0.08)" : "none",
-                  }}
-                >
-                  {m === "all" ? "全部模块" : m}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1">
-          {!session || session.results.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 py-10">
-              <Spinner size="md" />
-              <p className="text-xs text-gray-400">{sessionLoading ? "连接中..." : "解析测试库中..."}</p>
-            </div>
-          ) : filteredResults.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 py-10">
-              <p className="text-xs text-gray-400">没有符合条件的结果</p>
-            </div>
-          ) : (
-            filteredResults.map((result) => {
-              const st = statusStyle[result.status] ?? statusStyle.pending;
-              const isRunning = result.status === "running";
-              const cmdLogs = testCmdLogs[result.id] ?? [];
-              const hasCmds = cmdLogs.length > 0;
-              const isExpanded = isRunning || expandedIds.has(result.id);
-              const toggleExpand = () => {
-                if (isRunning || !hasCmds) return;
-                setExpandedIds((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(result.id)) { next.delete(result.id); } else { next.add(result.id); }
-                  return next;
-                });
-              };
-              return (
-                <div
-                  key={result.id}
-                  className="rounded-xl overflow-hidden"
-                  style={{ background: isRunning ? "rgba(99,102,241,0.06)" : "rgba(0,0,0,0.02)" }}
-                >
-                  <div
-                    className="flex items-center gap-2.5 p-2.5"
-                    style={{ cursor: !isRunning && hasCmds ? "pointer" : "default" }}
-                    onClick={toggleExpand}
-                  >
-                    <span
-                      className="shrink-0 text-xs px-2 py-0.5 rounded-full font-medium min-w-12 text-center inline-flex items-center justify-center gap-1"
-                      style={{ background: st.bg, color: st.text }}
-                    >
-                      {result.status === "running" ? (
-                        <>
-                          <Spinner size="sm" color="current" className="w-3 h-3" />
-                          运行
-                        </>
-                      ) : (
-                        st.label
-                      )}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-mono text-gray-700 truncate">{result.name}</p>
-                      <p className="text-xs text-gray-400 truncate">{result.module} · {result.arch}</p>
-                    </div>
-                    {result.duration !== undefined && (
-                      <span className="text-xs text-gray-400 shrink-0">{result.duration}s</span>
-                    )}
-                    {/* 重跑按钮：失败/超时/崩溃 且 无全局运行中时显示 */}
-                    {(result.status === "failed" || result.status === "timeout" || result.status === "crash" || result.status === "interrupted") &&
-                      session?.status !== "running" && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleRerun(result.id, newHapPath || undefined); }}
-                        disabled={!!rerunningId}
-                        title="重新运行此测试"
-                        className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-40"
-                        style={{ background: "rgba(99,102,241,0.1)", color: "#6366f1", border: "1px solid rgba(99,102,241,0.18)" }}
-                      >
-                        {rerunningId === result.id ? (
-                          <Spinner size="sm" color="current" className="w-3 h-3" />
-                        ) : (
-                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                          </svg>
-                        )}
-                        重跑
-                      </button>
-                    )}
-                    {!isRunning && hasCmds && (
-                      <svg
-                        className="w-3.5 h-3.5 shrink-0 transition-transform"
-                        style={{ color: "#94a3b8", transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)" }}
-                        fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    )}
-                  </div>
-                  {isExpanded && hasCmds && (
-                    <div className="mx-2.5 mb-2.5 rounded-lg overflow-hidden" style={{ background: "#0f172a" }}>
-                      <div className="px-3 py-1.5 flex items-center gap-1.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                        {isRunning
-                          ? <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#10b981" }} />
-                          : <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#475569" }} />}
-                        <span className="text-xs font-mono" style={{ color: "#475569" }}>执行命令</span>
-                        <span className="text-xs font-mono ml-auto" style={{ color: "#334155" }}>{cmdLogs.length} 条</span>
-                      </div>
-                      <div className="p-3 space-y-1 max-h-40 overflow-y-auto">
-                        {cmdLogs.map((log, i) => {
-                          const msg = log.message;
-                          const isCmd    = msg.startsWith("[CMD]");
-                          const isHdc    = msg.startsWith("[HDC]");
-                          const isWarn   = msg.startsWith("[WARN]");
-                          const isFail   = msg.startsWith("[FAIL]");
-                          const isResult = msg.startsWith("[RESULT]");
-                          return (
-                            <div key={i} className="flex gap-2 text-xs font-mono leading-5 items-start">
-                              <span className="shrink-0" style={{ color: "#334155" }}>
-                                {new Date(log.time).toLocaleTimeString("zh-CN")}
-                              </span>
-                              {isCmd ? (
-                                <span className="min-w-0 break-all" style={{ color: "#86efac" }}>
-                                  <span style={{ color: "#4ade80" }}>$ </span>
-                                  {msg.replace("[CMD] ", "")}
-                                </span>
-                              ) : isHdc ? (
-                                <span className="min-w-0 break-all" style={{ color: "#67e8f9" }}>{msg}</span>
-                              ) : isWarn ? (
-                                <span className="min-w-0 break-all" style={{ color: "#fbbf24" }}>{msg}</span>
-                              ) : isFail ? (
-                                <span className="min-w-0 break-all" style={{ color: "#f87171" }}>{msg}</span>
-                              ) : isResult ? (
-                                <span className="min-w-0 break-all" style={{ color: "#c084fc" }}>{msg}</span>
-                              ) : (
-                                <span className="min-w-0 break-all" style={{ color: "#818cf8" }}>{msg.replace("[INFO] ", "")}</span>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                  {isRunning && <div />}
-                </div>
-              );
-            })
-          )}
-          <div ref={resultsEndRef} />
-        </div>
-      </div>
+      {/* 测试结果列表 - 全宽，复用报告分析列表组件，带单条日志展开 */}
+      <TestResultsList
+        results={session?.results ?? []}
+        sessionStatus={session?.status ?? ""}
+        rerunningId={rerunningId}
+        onRerun={(resultId) => handleRerun(resultId, newHapPath || undefined)}
+        logData={testCmdLogs}
+        expandedIds={expandedIds}
+        onToggleExpand={(rid) => setExpandedIds((prev) => {
+          const next = new Set(prev);
+          if (next.has(rid)) { next.delete(rid); } else { next.add(rid); }
+          return next;
+        })}
+        listEndRef={resultsEndRef}
+        excludePending
+        fillHeight
+        loadingLabel={sessionLoading ? "连接中..." : "解析测试库中..."}
+      />
 
       {/* 终端日志 - 全宽，位于结果列表下方 */}
       <div className="rounded-2xl overflow-hidden shadow-sm shrink-0" style={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.06)" }}>

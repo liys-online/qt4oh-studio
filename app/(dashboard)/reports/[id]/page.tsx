@@ -3,15 +3,16 @@
 import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Spinner } from "@heroui/react";
-import { testStatusStyle as statusStyle, sessionStatusStyle, cardStyle } from "@/lib/status";
+import { sessionStatusStyle } from "@/lib/status";
 import { formatDateTime } from "@/lib/utils";
+import TestResultsList from "@/components/TestResultsList";
 
 interface TestResult {
   id: string;
   name: string;
   module: string;
   arch: string;
-  path: string;
+  path?: string;
   status: "success" | "timeout" | "crash" | "failed" | "pending" | "running" | "interrupted";
   duration?: number;
   crashLogs?: { name: string; content: string }[];
@@ -59,8 +60,6 @@ interface Session {
 export default function ReportDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [session, setSession] = useState<Session | null>(null);
-  const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [filterModule, setFilterModule] = useState<string>("all");
   const [selectedCrash, setSelectedCrash] = useState<{ name: string; content: string } | null>(null);
   const [crashLoading, setCrashLoading] = useState(false);
   const [selectedReport, setSelectedReport] = useState<{ resultId: string; sessionId: string; reportFile?: string } | null>(null);
@@ -225,15 +224,6 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
       </div>
     );
   }
-
-  const modules = ["all", ...Array.from(new Set(session.results.map((r) => r.module)))];
-  const statusFilters = ["all", "success", "timeout", "crash", "failed", "interrupted"];
-
-  const filtered = session.results.filter((r) => {
-    const matchStatus = filterStatus === "all" || r.status === filterStatus;
-    const matchModule = filterModule === "all" || r.module === filterModule;
-    return matchStatus && matchModule;
-  });
 
   const summary = session.summary;
   const passRate = summary && summary.total > 0
@@ -406,185 +396,15 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
         </div>
       )}
 
-      {/* 过滤器 */}
-      <div style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 10,
-        display: "flex",
-        flexWrap: "wrap",
-        gap: 8,
-        paddingTop: 10,
-        paddingBottom: 10,
-        paddingLeft: 32,
-        paddingRight: 32,
-        margin: "0 -32px",
-        background: "rgba(244,246,248,0.98)",
-        backdropFilter: "blur(10px)",
-        WebkitBackdropFilter: "blur(10px)",
-        boxShadow: "0 2px 16px rgba(0,0,0,0.06), 0 1px 0 rgba(65,205,82,0.10)",
-      }}>
-        {/* 状态过滤 */}
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {statusFilters.map((s) => {
-            const active = filterStatus === s;
-            const style = s !== "all" ? statusStyle[s] : null;
-            return (
-              <button
-                key={s}
-                onClick={() => setFilterStatus(s)}
-                style={{
-                  padding: "5px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600,
-                  border: "none", cursor: "pointer", transition: "all 0.15s",
-                  background: active
-                    ? (style ? style.bg : "rgba(65,205,82,0.15)")
-                    : "rgba(255,255,255,0.7)",
-                  color: active
-                    ? (style ? style.text : "#1d7a2e")
-                    : "#94a3b8",
-                  boxShadow: active ? "0 2px 8px rgba(0,0,0,0.08)" : "none",
-                }}
-              >
-                {s === "all" ? "全部" : statusStyle[s]?.label ?? s}
-              </button>
-            );
-          })}
-        </div>
-        {/* 模块过滤 */}
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {modules.map((m) => {
-            const active = filterModule === m;
-            return (
-              <button
-                key={m}
-                onClick={() => setFilterModule(m)}
-                style={{
-                  padding: "5px 14px", borderRadius: 20, fontSize: 12, fontWeight: 500,
-                  border: "none", cursor: "pointer", transition: "all 0.15s",
-                  background: active ? "rgba(65,205,82,0.15)" : "rgba(255,255,255,0.7)",
-                  color: active ? "#1d7a2e" : "#94a3b8",
-                  boxShadow: active ? "0 2px 8px rgba(0,0,0,0.08)" : "none",
-                }}
-              >
-                {m === "all" ? "全部模块" : m}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 结果列表 */}
-      <div style={{ ...glass, overflow: "hidden" }}>
-        <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(65,205,82,0.08)" }}>
-          <h2 style={{ fontSize: 13, fontWeight: 700, color: "#1d252c", margin: 0 }}>
-            测试结果
-            <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 500, color: "#94a3b8" }}>({filtered.length})</span>
-          </h2>
-        </div>
-        <div style={{ padding: "8px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
-          {filtered.length === 0 && (
-            <p style={{ textAlign: "center", color: "#94a3b8", fontSize: 13, padding: "32px 0" }}>
-              没有符合条件的结果
-            </p>
-          )}
-          {filtered.map((result) => {
-            const rs = statusStyle[result.status] ?? { bg: "rgba(148,163,184,0.1)", text: "#64748b", label: result.status, dot: "#94a3b8" };
-            return (
-              <div
-                key={result.id}
-                style={{
-                  display: "flex", alignItems: "center", gap: 12,
-                  padding: "10px 12px", borderRadius: 12,
-                  transition: "background 0.15s",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(65,205,82,0.04)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-              >
-                {/* 状态徽章 */}
-                <span style={{
-                  padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700,
-                  background: rs.bg, color: rs.text, flexShrink: 0, minWidth: 48, textAlign: "center",
-                }}>
-                  {rs.label}
-                </span>
-                {/* 信息 */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 12, fontFamily: "monospace", color: "#1d252c", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {result.name}
-                  </p>
-                  <p style={{ fontSize: 11, color: "#94a3b8", margin: "2px 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {result.module} · {result.arch} · {result.path}
-                  </p>
-                </div>
-                {/* 崩溃日志按钮 */}
-                {result.crashLogs && result.crashLogs.length > 0 && (
-                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                    {result.crashLogs.map((log) => (
-                      <button
-                        key={log.name}
-                        onClick={() => openCrash(log)}
-                        style={{
-                          padding: "4px 10px", borderRadius: 8, fontSize: 11, fontWeight: 600,
-                          border: "none", cursor: "pointer",
-                          background: "rgba(239,68,68,0.12)", color: "#dc2626",
-                          transition: "background 0.15s",
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(239,68,68,0.2)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(239,68,68,0.12)")}
-                      >
-                        崩溃日志
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {/* XML 报告按钮 */}
-                {result.reportFile && (
-                  <button
-                    onClick={() => openReport(result)}
-                    style={{
-                      padding: "4px 10px", borderRadius: 8, fontSize: 11, fontWeight: 600,
-                      border: "none", cursor: "pointer", flexShrink: 0,
-                      background: "rgba(65,205,82,0.1)", color: "#1d7a2e",
-                      transition: "background 0.15s",
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(65,205,82,0.2)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(65,205,82,0.1)")}
-                  >
-                    查看报告
-                  </button>
-                )}
-                {/* 重跑按钮 */}
-                {(result.status === "failed" || result.status === "timeout" || result.status === "crash") &&
-                  session.status !== "running" && (
-                  <button
-                    onClick={() => handleRerun(result.id, newHapPath || undefined)}
-                    disabled={!!rerunningId}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: 5,
-                      padding: "4px 10px", borderRadius: 8, fontSize: 11, fontWeight: 600,
-                      border: "none", cursor: rerunningId ? "not-allowed" : "pointer", flexShrink: 0,
-                      background: rerunningId === result.id ? "rgba(99,102,241,0.18)" : "rgba(99,102,241,0.1)",
-                      color: "#6366f1", opacity: rerunningId && rerunningId !== result.id ? 0.5 : 1,
-                      transition: "background 0.15s",
-                    }}
-                    onMouseEnter={(e) => { if (!rerunningId) e.currentTarget.style.background = "rgba(99,102,241,0.2)"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = rerunningId === result.id ? "rgba(99,102,241,0.18)" : "rgba(99,102,241,0.1)"; }}
-                  >
-                    {rerunningId === result.id ? (
-                      <>
-                        <svg style={{ animation: "spin 1s linear infinite" }} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        重跑中
-                      </>
-                    ) : "重跑"}
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      {/* 测试结果列表（复用共享组件） */}
+      <TestResultsList
+        results={session.results}
+        sessionStatus={session.status}
+        rerunningId={rerunningId}
+        onRerun={(resultId) => handleRerun(resultId, newHapPath || undefined)}
+        onOpenCrash={openCrash}
+        onOpenReport={openReport}
+      />
 
       {/* 崩溃日志 Modal（原生实现，避免 HeroUI portal 问题） */}
       {!!selectedCrash && (
