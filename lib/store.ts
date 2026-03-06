@@ -50,6 +50,8 @@ export interface TestSession {
   filterArch?: string;
   filterModule?: string | string[];
   filterPattern?: string;
+  /** 是否跳过 HAP 包内 resources/resfile/gitignore 忽略列表 */
+  disableIgnoreList?: boolean;
   timeout: number;
   status: "running" | "completed" | "stopped";
   startTime: string;

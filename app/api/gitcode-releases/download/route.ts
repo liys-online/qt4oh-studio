@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
 import * as path from "path";
-import { parseHap, getModules } from "@/lib/hap-parser";
+import { parseHap, getModules, readHapIgnoreList } from "@/lib/hap-parser";
 import { UPLOAD_DIR } from "@/lib/paths";
 
 /** 确保上传目录存在 */
@@ -72,10 +72,11 @@ export async function POST(req: NextRequest) {
         // ── 已缓存：直接解析返回 ────────────────────────────
         if (fs.existsSync(destPath)) {
           const testLibs = await parseHap(destPath);
+          const ignoreList = await readHapIgnoreList(destPath);
           const modules = getModules(testLibs);
           const archs = [...new Set(testLibs.map((t) => t.arch))];
           const st = statFile(destPath);
-          controller.enqueue(sse({ status: "exists", data: { fileName, filePath: destPath, totalLibs: testLibs.length, modules, archs, testLibs, size: st?.size } }));
+          controller.enqueue(sse({ status: "exists", data: { fileName, filePath: destPath, totalLibs: testLibs.length, modules, archs, testLibs, ignoreList, size: st?.size } }));
           controller.close();
           return;
         }
@@ -136,11 +137,12 @@ export async function POST(req: NextRequest) {
         fs.renameSync(tmpPath, destPath);
 
         // ── Step 3：解析 HAP ─────────────────────────────────
-        const testLibs = await parseHap(destPath);
-        const modules = getModules(testLibs);
-        const archs = [...new Set(testLibs.map((t) => t.arch))];
+        const testLibs2 = await parseHap(destPath);
+        const ignoreList2 = await readHapIgnoreList(destPath);
+        const modules2 = getModules(testLibs2);
+        const archs2 = [...new Set(testLibs2.map((t) => t.arch))];
         const st = statFile(destPath);
-        controller.enqueue(sse({ status: "done", data: { fileName, filePath: destPath, totalLibs: testLibs.length, modules, archs, testLibs, size: st?.size } }));
+        controller.enqueue(sse({ status: "done", data: { fileName, filePath: destPath, totalLibs: testLibs2.length, modules: modules2, archs: archs2, testLibs: testLibs2, ignoreList: ignoreList2, size: st?.size } }));
       } catch (e: unknown) {
         controller.enqueue(sse({ status: "error", message: (e as Error).message }));
         try { fs.unlinkSync(destPath + ".tmp"); } catch { /* ignore */ }

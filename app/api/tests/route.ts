@@ -12,14 +12,20 @@ export async function GET() {
     auth?.userId,
     auth?.role,
   );
-  // 有 summary 的会话（已完成/已停止），前端用 summary 计算进度，不需要 results 数组
-  // 运行中的会话返回精简的 results（只有 status），供进度条使用
-  const lean = sessions.map((s) => ({
-    ...s,
-    results: s.summary
-      ? []
-      : s.results.map((r) => ({ id: r.id, status: r.status })),
-  }));
+  // 有 summary 的会话（已完成/已停止），默认不返回 results
+  // 但如果有结果正在重跑（running/pending），依然返回精简 results，供前端检测重跑状态
+  const lean = sessions.map((s) => {
+    const hasActiveRerun = s.results.some(
+      (r) => r.status === "running" || r.status === "pending"
+    );
+    return {
+      ...s,
+      results:
+        !s.summary || hasActiveRerun
+          ? s.results.map((r) => ({ id: r.id, status: r.status }))
+          : [],
+    };
+  });
   return NextResponse.json({ sessions: lean });
 }
 
@@ -48,6 +54,7 @@ export async function POST(req: NextRequest) {
       filterPattern,
       timeout,
       skipInstall,
+      disableIgnoreList,
     } = body;
 
     // hapFilePath（直接路径，Electron 模式）优先；否则从 UPLOAD_DIR 拼接 fileName
@@ -64,6 +71,7 @@ export async function POST(req: NextRequest) {
       filterPattern,
       timeout,
       skipInstall,
+      disableIgnoreList,
       userId: auth?.userId,
     });
 

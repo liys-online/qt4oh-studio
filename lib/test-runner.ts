@@ -17,7 +17,7 @@ import {
   installHap,
 } from "./hdc";
 import { parseXmlReport } from "./xml-report";
-import { parseHap, filterTestLibs, type TestLib } from "./hap-parser";
+import { parseHap, filterTestLibs, readHapIgnoreList, type TestLib } from "./hap-parser";
 import {
   getSession,
   upsertSession,
@@ -100,6 +100,8 @@ export interface RunOptions {
   filterPattern?: string;
   timeout?: number;
   skipInstall?: boolean;
+  /** 跳过 HAP 包内 resources/resfile/gitignore 忽略列表，默认为 false（即默认应用忽略） */
+  disableIgnoreList?: boolean;
   /** 创建该会话的用户 ID */
   userId?: number;
 }
@@ -118,6 +120,7 @@ export async function startTestSession(options: RunOptions): Promise<string> {
     filterPattern,
     timeout = 300,
     skipInstall = false,
+    disableIgnoreList = false,
     userId,
   } = options;
 
@@ -138,6 +141,7 @@ export async function startTestSession(options: RunOptions): Promise<string> {
     status: "running",
     startTime: new Date().toISOString(),
     results: [],
+    disableIgnoreList,
     userId,
   };
   await upsertSession(session);
@@ -202,12 +206,34 @@ async function runSession(
     return;
   }
 
-  const libs = filterTestLibs(
+  // 读取 HAP 内置忽略列表（resources/resfile/gitignore）
+  let ignoreModules: string[] = [];
+  if (!session.disableIgnoreList) {
+    ignoreModules = await readHapIgnoreList(hapFilePath);
+    if (ignoreModules.length > 0) {
+      emit(sessionId, `[INFO] 忽略列表内容 (${ignoreModules.length} 条): ${ignoreModules.join(', ')}`);
+    } else {
+      emit(sessionId, `[INFO] 未找到 gitignore 文件或内容为空`);
+    }
+  }
+
+  const allLibsBeforeFilter = filterTestLibs(
     allLibs,
     session.filterArch,
     session.filterModule,
     session.filterPattern
   );
+  const libs = ignoreModules.length > 0
+    ? filterTestLibs(allLibsBeforeFilter, undefined, undefined, undefined, ignoreModules)
+    : allLibsBeforeFilter;
+
+  if (ignoreModules.length > 0) {
+    emit(sessionId, `[INFO] 忽略前：${allLibsBeforeFilter.length} 个库，忽略后：${libs.length} 个库`);
+    const skipped = allLibsBeforeFilter.filter((l) => !libs.includes(l));
+    for (const s of skipped) {
+      emit(sessionId, `[INFO] 跳过(忽略列表): ${s.name} [module=${s.module}]`);
+    }
+  }
 
   emit(sessionId, `[INFO] 共找到 ${libs.length} 个测试库`);
 

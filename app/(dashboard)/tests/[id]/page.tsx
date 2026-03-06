@@ -155,10 +155,13 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
         flushPendingGroups();
         const running = (data.session.results as TestResult[]).find((r) => r.status === "running");
         currentTestIdRef.current = running?.id ?? null;
-        // 重跑结束时，清除 rerunningId
-        if (!running) setRerunningId(null);
+        // 重跑结束时，清除 rerunningId、广播通知列表页刷新
+        if (!running) {
+          setRerunningId(null);
+          try { new BroadcastChannel("qt4oh_sessions").postMessage({ type: "updated", id }); } catch { /* ignore */ }
+        }
         if (data.type === "done") {
-          es.close();
+          // 不关闭 SSE —— 保持连接以便重跑时接收 __status__ 推送
           setConnected(false);
         }
       }
@@ -166,11 +169,29 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
 
     es.onerror = () => {
       setConnected(false);
+      // onerror 时才真正关闭
       es.close();
     };
 
     return () => es.close();
   }, [id]);
+
+  // 轮询兜底：重跑期间每 2s 检查状态，防止 SSE 事件丢失导致按钮永久禁用
+  useEffect(() => {
+    if (!rerunningId) return;
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/tests/${id}`);
+        const data = await res.json();
+        const results = (data.session?.results ?? []) as { id: string; status: string }[];
+        const target = results.find((r) => r.id === rerunningId);
+        if (!target || (target.status !== "running" && target.status !== "pending")) {
+          setRerunningId(null);
+        }
+      } catch { /* 忽略网络错误 */ }
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [rerunningId, id]);
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });

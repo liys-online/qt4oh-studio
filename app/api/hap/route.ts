@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
 import * as path from "path";
-import { saveHapFile, parseHap, getModules } from "@/lib/hap-parser";
+import { saveHapFile, parseHap, getModules, readHapIgnoreList } from "@/lib/hap-parser";
 import { UPLOAD_DIR } from "@/lib/paths";
 
 /** POST /api/hap - 上传 HAP 文件 */
@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
 
     // 解析测试库列表
     const testLibs = await parseHap(hapFilePath);
+    const ignoreList = await readHapIgnoreList(hapFilePath);
     const modules = getModules(testLibs);
     const archs = [...new Set(testLibs.map((t) => t.arch))];
 
@@ -50,6 +51,7 @@ export async function POST(req: NextRequest) {
       modules,
       archs,
       testLibs,
+      ignoreList,
     });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
@@ -65,10 +67,11 @@ export async function GET(req: NextRequest) {
 
     const filePath = path.join(UPLOAD_DIR, fileName);
     const testLibs = await parseHap(filePath);
+    const ignoreList = await readHapIgnoreList(filePath);
     const modules = getModules(testLibs);
     const archs = [...new Set(testLibs.map((t) => t.arch))];
 
-    return NextResponse.json({ fileName, totalLibs: testLibs.length, modules, archs, testLibs });
+    return NextResponse.json({ fileName, totalLibs: testLibs.length, modules, archs, testLibs, ignoreList });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
     return NextResponse.json({ error: message }, { status: 500 });

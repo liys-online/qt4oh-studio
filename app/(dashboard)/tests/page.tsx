@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Spinner } from "@heroui/react";
 import { useRouter } from "next/navigation";
 import { useDevices } from "../devices-context";
@@ -13,7 +13,9 @@ interface HapInfo {
   totalLibs: number;
   modules: string[];
   archs: string[];
-  testLibs?: { module: string; arch?: string }[];
+  testLibs?: { module: string; name: string; path: string; arch?: string }[];
+  /** HAP 内 resources/resfile/gitignore 列出的忽略模块 */
+  ignoreList?: string[];
 }
 
 interface SessionSummary {
@@ -70,6 +72,7 @@ export default function TestsPage() {
   const [abilityName, setAbilityName] = useState("EntryAbility");
   const [timeout, setTimeout_] = useState(300);
   const [skipInstall, setSkipInstall] = useState(false);
+  const [disableIgnoreList, setDisableIgnoreList] = useState(false);
   const [starting, setStarting] = useState(false);
 
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -109,26 +112,51 @@ export default function TestsPage() {
     }
   };
 
-  useEffect(() => {
+  const refreshSessions = () =>
     fetch("/api/tests")
       .then((r) => r.json())
       .then((d) => setSessions(d.sessions || []));
+
+  useEffect(() => {
+    refreshSessions();
     // 默认展示 GitCode 选项卡，提前加载数据
     fetchGcReleases();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 有运行中的会话时每 3s 刷新一次列表以更新进度
-  // 用 hasRunning 而非 sessions 作为依赖，避免每次 poll 后重建 interval
-  const hasRunning = sessions.some((s) => s.status === "running");
+  // 监听 BroadcastChannel — 详情页重跑完成后实时通知列表刷新
   useEffect(() => {
-    if (!hasRunning) return;
-    const timer = setInterval(() => {
-      fetch("/api/tests")
-        .then((r) => r.json())
-        .then((d) => setSessions(d.sessions || []));
-    }, 3000);
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel("qt4oh_sessions");
+      bc.onmessage = () => refreshSessions();
+    } catch { /* 环境不支持时忽略 */ }
+    return () => { try { bc?.close(); } catch { /* ignore */ } };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 页面可见/获焦时立即刷新（从详情页返回列表页时触发）
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === "visible") refreshSessions(); };
+    const onFocus = () => refreshSessions();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 有运行中的会话、或有任意结果正在重跑时，每 3s 快速轮询
+  const hasRunning = sessions.some(
+    (s) => s.status === "running" || s.results.some((r) => r.status === "running" || r.status === "pending")
+  );
+  useEffect(() => {
+    const interval = hasRunning ? 3000 : 10000;
+    const timer = setInterval(refreshSessions, interval);
     return () => clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasRunning]);
 
   // 设备列表就绪后若只有一台则自动选中
@@ -314,6 +342,7 @@ export default function TestsPage() {
           filterPattern: filterPattern || undefined,
           timeout,
           skipInstall,
+          disableIgnoreList: disableIgnoreList || undefined,
         }),
       });
       const data = await res.json();
@@ -330,21 +359,41 @@ export default function TestsPage() {
   const step2Done = !!hapInfo;
   const step3Active = step1Done && step2Done;
 
-  const moduleCounts = (hapInfo?.testLibs ?? []).reduce<Record<string, number>>((acc, lib) => {
-    if (lib.module && lib.module !== "unknown") {
-      acc[lib.module] = (acc[lib.module] || 0) + 1;
-    }
-    return acc;
-  }, {});
+  // 有效库列表：disableIgnoreList=false（默认）时要剔除 ignoreList 中的库
+  const effectiveTestLibs = useMemo(() => {
+    const libs = hapInfo?.testLibs ?? [];
+    if (!hapInfo || disableIgnoreList || !hapInfo.ignoreList?.length) return libs;
+    const ignoreSet = hapInfo.ignoreList;
+    return libs.filter((lib) => {
+      const nameNoSo = lib.name.replace(/\.so$/, '');
+      const shortName = nameNoSo.replace(/^libtst_/, '');
+      return !ignoreSet.some(
+        (entry) => entry === lib.path || entry === lib.module || entry === lib.name || entry === nameNoSo || entry === shortName
+      );
+    });
+  }, [hapInfo, disableIgnoreList]);
 
-  const archCounts = (hapInfo?.testLibs ?? []).reduce<Record<string, number>>((acc, lib) => {
-    if (lib.arch) acc[lib.arch] = (acc[lib.arch] || 0) + 1;
-    return acc;
-  }, {});
+  const moduleCounts = useMemo(() =>
+    effectiveTestLibs.reduce<Record<string, number>>((acc, lib) => {
+      if (lib.module && lib.module !== "unknown") {
+        acc[lib.module] = (acc[lib.module] || 0) + 1;
+      }
+      return acc;
+    }, {})
+  , [effectiveTestLibs]);
 
-  const sortedModules = hapInfo?.modules
-    ? [...hapInfo.modules].sort((a, b) => (moduleCounts[b] || 0) - (moduleCounts[a] || 0))
-    : [];
+  const archCounts = useMemo(() =>
+    effectiveTestLibs.reduce<Record<string, number>>((acc, lib) => {
+      if (lib.arch) acc[lib.arch] = (acc[lib.arch] || 0) + 1;
+      return acc;
+    }, {})
+  , [effectiveTestLibs]);
+
+  const sortedModules = useMemo(() =>
+    Object.keys(moduleCounts).sort((a, b) => (moduleCounts[b] || 0) - (moduleCounts[a] || 0))
+  , [moduleCounts]);
+
+  const effectiveTotal = effectiveTestLibs.length;
 
   const runningSessions = sessions.filter((s) => s.status === "running");
   const historySessions = sessions.filter((s) => s.status !== "running");
@@ -525,7 +574,7 @@ export default function TestsPage() {
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-gray-800 truncate">{hapInfo.fileName}</p>
-                          <p className="text-xs text-gray-400">找到 <span style={{ color: "#1d7a2e" }} className="font-bold">{hapInfo.totalLibs}</span> 个测试库 · 点击重新上传</p>
+                          <p className="text-xs text-gray-400">找到 <span style={{ color: "#1d7a2e" }} className="font-bold">{effectiveTotal}</span> 个测试库{!disableIgnoreList && hapInfo.ignoreList?.length ? <span style={{ color: "#b45309" }}>（已忆略 {hapInfo.totalLibs - effectiveTotal} 个）</span> : ""} · 点击重新上传</p>
                         </div>
                         <div className="flex flex-wrap gap-1.5 sm:ml-auto">
                           {hapInfo.archs.map((a) => (
@@ -785,10 +834,10 @@ export default function TestsPage() {
                               />
                               <span>全部架构</span>
                             </span>
-                            <span className="text-[11px]" style={{ color: "#94a3b8" }}>{hapInfo.totalLibs}</span>
+                            <span className="text-[11px]" style={{ color: "#94a3b8" }}>{effectiveTotal}</span>
                           </label>
                           <div className="mt-1 space-y-1">
-                            {hapInfo.archs.map((a) => {
+                            {hapInfo.archs.filter((a) => archCounts[a] > 0).map((a) => {
                               const active = filterArch === a;
                               const count = archCounts[a] || 0;
                               return (
@@ -817,7 +866,14 @@ export default function TestsPage() {
                         </div>
                       </div>
                       <div>
-                        <label className="text-xs font-medium text-gray-500 mb-1.5 block">模块过滤（可多选）</label>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-medium text-gray-500">模块过滤（可多选）</label>
+                          {!disableIgnoreList && (hapInfo.ignoreList ?? []).length > 0 && hapInfo.totalLibs > effectiveTotal && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: "rgba(245,158,11,0.12)", color: "#b45309" }}>
+                              已忆略 {hapInfo.totalLibs - effectiveTotal} 个库
+                            </span>
+                          )}
+                        </div>
                         <div className="rounded-xl p-2" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.06)" }}>
                           <label
                             className="w-full flex items-center justify-between text-xs px-3 py-2 rounded-lg font-medium transition-all"
@@ -835,7 +891,7 @@ export default function TestsPage() {
                               />
                               <span>全部模块</span>
                             </span>
-                            <span className="text-[11px]" style={{ color: "#94a3b8" }}>{hapInfo.totalLibs}</span>
+                            <span className="text-[11px]" style={{ color: "#94a3b8" }}>{effectiveTotal}</span>
                           </label>
                           <div className="mt-1 max-h-44 overflow-y-auto space-y-1 pr-1">
                             {sortedModules.map((m) => {
@@ -919,6 +975,23 @@ export default function TestsPage() {
                         <span
                           className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all"
                           style={{ left: skipInstall ? "calc(100% - 22px)" : "2px" }}
+                        />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 rounded-xl" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.06)" }}>
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">忽略列表（gitignore）</p>
+                        <p className="text-xs text-gray-400">开启后不跟随 HAP 内置忽略列表过滤测试库</p>
+                      </div>
+                      <button
+                        onClick={() => setDisableIgnoreList(!disableIgnoreList)}
+                        className="w-11 h-6 rounded-full transition-all relative"
+                        style={{ background: disableIgnoreList ? "linear-gradient(135deg, #f59e0b, #d97706)" : "rgba(0,0,0,0.15)" }}
+                      >
+                        <span
+                          className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all"
+                          style={{ left: disableIgnoreList ? "calc(100% - 22px)" : "2px" }}
                         />
                       </button>
                     </div>

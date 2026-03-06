@@ -76,7 +76,8 @@ export function filterTestLibs(
   testLibs: TestLib[],
   filterArch?: string,
   filterModule?: string | string[],
-  filterPattern?: string
+  filterPattern?: string,
+  ignoreModules?: string[]
 ): TestLib[] {
   let result = testLibs;
   if (filterArch) { result = result.filter((t) => t.arch === filterArch); }
@@ -89,10 +90,48 @@ export function filterTestLibs(
     result = result.filter((t) => modules.some((m) => t.path.startsWith(`tests/${m}/`)));
   }
 
+  if (ignoreModules && ignoreModules.length > 0) {
+    result = result.filter((t) => {
+      const nameNoSo = t.name.replace(/\.so$/, '');           // libtst_qchar
+      const shortName = nameNoSo.replace(/^libtst_/, '');     // qchar
+      return !ignoreModules.some(
+        (entry) =>
+          entry === t.path ||       // tests/qtbase/tst_qpluginloader/bin/libtst_xxx.so
+          entry === t.module ||
+          entry === t.name ||
+          entry === nameNoSo ||
+          entry === shortName
+      );
+    });
+  }
+
   if (filterPattern) {
     result = result.filter((t) => t.name.includes(filterPattern));
   }
   return result;
+}
+
+/**
+ * 从 HAP 包内读取 resources/resfile/gitignore 文件，
+ * 返回要忽略的模块名列表（过滤掉注释行和空行）。
+ * 若文件不存在则返回空数组。
+ */
+export async function readHapIgnoreList(hapFilePath: string): Promise<string[]> {
+  try {
+    const directory = await unzipper.Open.file(hapFilePath);
+    const entry = directory.files.find(
+      (f) => f.path === 'resources/resfile/gitignore'
+    );
+    if (!entry) return [];
+    const buf = await entry.buffer();
+    const text = buf.toString('utf-8');
+    return text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && !line.startsWith('#'));
+  } catch {
+    return [];
+  }
 }
 
 /** 保存上传的 HAP 文件到本地，返回保存路径 */
