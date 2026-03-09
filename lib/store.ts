@@ -49,7 +49,6 @@ export interface TestSession {
   abilityName: string;
   filterArch?: string;
   filterModule?: string | string[];
-  filterPattern?: string;
   /** 是否跳过 HAP 包内 resources/resfile/gitignore 忽略列表 */
   disableIgnoreList?: boolean;
   timeout: number;
@@ -133,7 +132,6 @@ function rowToSession(s: DbSession, results: TestResult[]): TestSession {
     abilityName: s.ability_name,
     filterArch: s.filter_arch ?? undefined,
     filterModule: s.filter_module ? JSON.parse(s.filter_module) : undefined,
-    filterPattern: s.filter_pattern ?? undefined,
     timeout: s.timeout,
     status: s.status as TestSession["status"],
     startTime: s.start_time,
@@ -264,7 +262,7 @@ export async function upsertSession(session: TestSession): Promise<void> {
     ability_name: session.abilityName,
     filter_arch: session.filterArch ?? null,
     filter_module: session.filterModule != null ? JSON.stringify(session.filterModule) : null,
-    filter_pattern: session.filterPattern ?? null,
+    filter_pattern: null,
     timeout: session.timeout,
     status: session.status,
     start_time: session.startTime,

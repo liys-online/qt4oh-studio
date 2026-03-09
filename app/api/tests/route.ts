@@ -68,7 +68,6 @@ export async function POST(req: NextRequest) {
       abilityName,
       filterArch,
       filterModule,
-      filterPattern,
       timeout,
       skipInstall,
       disableIgnoreList,

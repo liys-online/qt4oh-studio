@@ -76,7 +76,6 @@ export function filterTestLibs(
   testLibs: TestLib[],
   filterArch?: string,
   filterModule?: string | string[],
-  filterPattern?: string,
   ignoreModules?: string[]
 ): TestLib[] {
   let result = testLibs;
@@ -105,9 +104,6 @@ export function filterTestLibs(
     });
   }
 
-  if (filterPattern) {
-    result = result.filter((t) => t.name.includes(filterPattern));
-  }
   return result;
 }
 

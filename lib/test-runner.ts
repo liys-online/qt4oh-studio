@@ -97,7 +97,6 @@ export interface RunOptions {
   architectures?: string[];
   filterArch?: string;
   filterModule?: string | string[];
-  filterPattern?: string;
   timeout?: number;
   skipInstall?: boolean;
   /** 跳过 HAP 包内 resources/resfile/gitignore 忽略列表，默认为 false（即默认应用忽略） */
@@ -117,7 +116,6 @@ export async function startTestSession(options: RunOptions): Promise<string> {
     architectures = ["arm64-v8a", "armeabi-v7a", "x86_64"],
     filterArch,
     filterModule,
-    filterPattern,
     timeout = 300,
     skipInstall = false,
     disableIgnoreList = false,
@@ -136,7 +134,6 @@ export async function startTestSession(options: RunOptions): Promise<string> {
     abilityName,
     filterArch,
     filterModule,
-    filterPattern,
     timeout,
     status: "running",
     startTime: new Date().toISOString(),
@@ -220,11 +217,10 @@ async function runSession(
   const allLibsBeforeFilter = filterTestLibs(
     allLibs,
     session.filterArch,
-    session.filterModule,
-    session.filterPattern
+    session.filterModule
   );
   const libs = ignoreModules.length > 0
-    ? filterTestLibs(allLibsBeforeFilter, undefined, undefined, undefined, ignoreModules)
+    ? filterTestLibs(allLibsBeforeFilter, undefined, undefined, ignoreModules)
     : allLibsBeforeFilter;
 
   if (ignoreModules.length > 0) {

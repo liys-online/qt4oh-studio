@@ -66,7 +66,6 @@ export default function TestsPage() {
   const [dragging, setDragging] = useState(false);
 
   const [filterModule, setFilterModule] = useState<string[]>([]);
-  const [filterPattern, setFilterPattern] = useState("");
   const [packageName, setPackageName] = useState("com.qtsig.qtest");
   const [abilityName, setAbilityName] = useState("EntryAbility");
   const [timeout, setTimeout_] = useState(300);
@@ -338,7 +337,6 @@ export default function TestsPage() {
           abilityName,
           filterArch: filterArch || undefined,
           filterModule: filterModule.length > 0 ? filterModule : undefined,
-          filterPattern: filterPattern || undefined,
           timeout,
           skipInstall,
           disableIgnoreList: disableIgnoreList || undefined,
@@ -878,18 +876,6 @@ export default function TestsPage() {
                   </div>
 
                   <div className="space-y-4">
-                    <div>
-                      <label className="text-xs font-medium text-gray-500 mb-1.5 block">名称过滤（可选）</label>
-                      <input
-                        type="text"
-                        placeholder="如: qatomic"
-                        value={filterPattern}
-                        onChange={(e) => setFilterPattern(e.target.value)}
-                        className="w-full text-sm rounded-xl px-3 py-2.5 outline-none transition-all"
-                        style={{ background: "rgba(0,0,0,0.04)", border: "1.5px solid rgba(0,0,0,0.1)" }}
-                      />
-                    </div>
-
                     <div>
                       <label className="text-xs font-medium text-gray-500 mb-1.5 block">单个测试超时</label>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
