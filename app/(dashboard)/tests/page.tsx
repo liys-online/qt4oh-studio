@@ -65,7 +65,6 @@ export default function TestsPage() {
   const [uploadError, setUploadError] = useState("");
   const [dragging, setDragging] = useState(false);
 
-  const [filterArch, setFilterArch] = useState("");
   const [filterModule, setFilterModule] = useState<string[]>([]);
   const [filterPattern, setFilterPattern] = useState("");
   const [packageName, setPackageName] = useState("com.qtsig.qtest");
@@ -382,12 +381,13 @@ export default function TestsPage() {
     }, {})
   , [effectiveTestLibs]);
 
-  const archCounts = useMemo(() =>
-    effectiveTestLibs.reduce<Record<string, number>>((acc, lib) => {
-      if (lib.arch) acc[lib.arch] = (acc[lib.arch] || 0) + 1;
-      return acc;
-    }, {})
-  , [effectiveTestLibs]);
+  // 从选中设备的 CPU ABI 列表中取主架构作为架构过滤
+  const filterArch = useMemo(() => {
+    if (!selectedDevice) return undefined;
+    const info = deviceInfoMap[selectedDevice];
+    if (!info?.cpuAbiList) return undefined;
+    return info.cpuAbiList.split(',')[0].trim() || undefined;
+  }, [selectedDevice, deviceInfoMap]);
 
   const sortedModules = useMemo(() =>
     Object.keys(moduleCounts).sort((a, b) => (moduleCounts[b] || 0) - (moduleCounts[a] || 0))
@@ -814,116 +814,64 @@ export default function TestsPage() {
                       />
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-xs font-medium text-gray-500 mb-1.5 block">架构过滤</label>
-                        <div className="rounded-xl p-2" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.06)" }}>
-                          <label
-                            className="w-full flex items-center justify-between text-xs px-3 py-2 rounded-lg font-medium transition-all"
-                            style={{
-                              cursor: "pointer",
-                              background: filterArch === "" ? "rgba(65,205,82,0.15)" : "transparent",
-                              color: filterArch === "" ? "#1d7a2e" : "#64748b",
-                            }}
-                          >
-                            <span className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={filterArch === ""}
-                                onChange={() => setFilterArch("")}
-                              />
-                              <span>全部架构</span>
-                            </span>
-                            <span className="text-[11px]" style={{ color: "#94a3b8" }}>{effectiveTotal}</span>
-                          </label>
-                          <div className="mt-1 space-y-1">
-                            {hapInfo.archs.filter((a) => archCounts[a] > 0).map((a) => {
-                              const active = filterArch === a;
-                              const count = archCounts[a] || 0;
-                              return (
-                                <label
-                                  key={a}
-                                  className="w-full flex items-center justify-between text-xs px-3 py-2 rounded-lg font-medium transition-all"
-                                  style={{
-                                    cursor: "pointer",
-                                    background: active ? "rgba(65,205,82,0.15)" : "transparent",
-                                    color: active ? "#1d7a2e" : "#64748b",
-                                  }}
-                                >
-                                  <span className="flex items-center gap-2 min-w-0">
-                                    <input
-                                      type="checkbox"
-                                      checked={active}
-                                      onChange={() => setFilterArch(active ? "" : a)}
-                                    />
-                                    <span className="truncate">{a}</span>
-                                  </span>
-                                  <span className="text-[11px]" style={{ color: active ? "#1d7a2e" : "#94a3b8" }}>{count}</span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-medium text-gray-500">模块过滤（可多选）</label>
+                        {!disableIgnoreList && (hapInfo.ignoreList ?? []).length > 0 && hapInfo.totalLibs > effectiveTotal && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: "rgba(245,158,11,0.12)", color: "#b45309" }}>
+                            已忆略 {hapInfo.totalLibs - effectiveTotal} 个库
+                          </span>
+                        )}
                       </div>
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-medium text-gray-500">模块过滤（可多选）</label>
-                          {!disableIgnoreList && (hapInfo.ignoreList ?? []).length > 0 && hapInfo.totalLibs > effectiveTotal && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: "rgba(245,158,11,0.12)", color: "#b45309" }}>
-                              已忆略 {hapInfo.totalLibs - effectiveTotal} 个库
-                            </span>
-                          )}
-                        </div>
-                        <div className="rounded-xl p-2" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.06)" }}>
-                          <label
-                            className="w-full flex items-center justify-between text-xs px-3 py-2 rounded-lg font-medium transition-all"
-                            style={{
-                              cursor: "pointer",
-                              background: filterModule.length === 0 ? "rgba(65,205,82,0.15)" : "transparent",
-                              color: filterModule.length === 0 ? "#1d7a2e" : "#64748b",
-                            }}
-                          >
-                            <span className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={filterModule.length === 0}
-                                onChange={() => setFilterModule([])}
-                              />
-                              <span>全部模块</span>
-                            </span>
-                            <span className="text-[11px]" style={{ color: "#94a3b8" }}>{effectiveTotal}</span>
-                          </label>
-                          <div className="mt-1 max-h-44 overflow-y-auto space-y-1 pr-1">
-                            {sortedModules.map((m) => {
-                              const active = filterModule.includes(m);
-                              const count = moduleCounts[m] || 0;
-                              return (
-                                <label
-                                  key={m}
-                                  className="w-full flex items-center justify-between text-xs px-3 py-2 rounded-lg font-medium transition-all"
-                                  style={{
-                                    cursor: "pointer",
-                                    background: active ? "rgba(65,205,82,0.15)" : "transparent",
-                                    color: active ? "#1d7a2e" : "#64748b",
-                                  }}
-                                >
-                                  <span className="flex items-center gap-2 min-w-0">
-                                    <input
-                                      type="checkbox"
-                                      checked={active}
-                                      onChange={() =>
-                                        setFilterModule((prev) =>
-                                          prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]
-                                        )
-                                      }
-                                    />
-                                    <span className="truncate">{m}</span>
-                                  </span>
-                                  <span className="text-[11px]" style={{ color: active ? "#1d7a2e" : "#94a3b8" }}>{count}</span>
-                                </label>
-                              );
-                            })}
-                          </div>
+                      <div className="rounded-xl p-2" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.06)" }}>
+                        <label
+                          className="w-full flex items-center justify-between text-xs px-3 py-2 rounded-lg font-medium transition-all"
+                          style={{
+                            cursor: "pointer",
+                            background: filterModule.length === 0 ? "rgba(65,205,82,0.15)" : "transparent",
+                            color: filterModule.length === 0 ? "#1d7a2e" : "#64748b",
+                          }}
+                        >
+                          <span className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={filterModule.length === 0}
+                              onChange={() => setFilterModule([])}
+                            />
+                            <span>全部模块</span>
+                          </span>
+                          <span className="text-[11px]" style={{ color: "#94a3b8" }}>{effectiveTotal}</span>
+                        </label>
+                        <div className="mt-1 max-h-44 overflow-y-auto space-y-1 pr-1">
+                          {sortedModules.map((m) => {
+                            const active = filterModule.includes(m);
+                            const count = moduleCounts[m] || 0;
+                            return (
+                              <label
+                                key={m}
+                                className="w-full flex items-center justify-between text-xs px-3 py-2 rounded-lg font-medium transition-all"
+                                style={{
+                                  cursor: "pointer",
+                                  background: active ? "rgba(65,205,82,0.15)" : "transparent",
+                                  color: active ? "#1d7a2e" : "#64748b",
+                                }}
+                              >
+                                <span className="flex items-center gap-2 min-w-0">
+                                  <input
+                                    type="checkbox"
+                                    checked={active}
+                                    onChange={() =>
+                                      setFilterModule((prev) =>
+                                        prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]
+                                      )
+                                    }
+                                  />
+                                  <span className="truncate">{m}</span>
+                                </span>
+                                <span className="text-[11px]" style={{ color: active ? "#1d7a2e" : "#94a3b8" }}>{count}</span>
+                              </label>
+                            );
+                          })}
                         </div>
                       </div>
                     </div>
