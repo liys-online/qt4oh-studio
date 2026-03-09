@@ -210,8 +210,9 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
         }),
       });
       if (!res.ok) {
-        const d = await res.json();
-        alert("重跑失败: " + (d.error || res.statusText));
+        let msg = res.statusText;
+        try { const t = await res.text(); const d = JSON.parse(t); msg = d.error || msg; } catch { /* non-json */ }
+        alert("重跑失败: " + msg);
         setRerunningId(null);
       }
       // 成功后由 SSE 推送状态更新，rerunningId 在 done/status 消息中清除

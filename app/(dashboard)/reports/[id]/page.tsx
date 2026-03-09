@@ -128,8 +128,9 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
         }),
       });
       if (!res.ok) {
-        const d = await res.json();
-        alert("重跑失败: " + (d.error || res.statusText));
+        let msg = res.statusText;
+        try { const t = await res.text(); const d = JSON.parse(t); msg = d.error || msg; } catch { /* non-json */ }
+        alert("重跑失败: " + msg);
         setRerunningId(null);
       }
     } catch (e) {
