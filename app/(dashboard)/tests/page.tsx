@@ -572,7 +572,7 @@ export default function TestsPage() {
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-gray-800 truncate">{hapInfo.fileName}</p>
-                          <p className="text-xs text-gray-400">找到 <span style={{ color: "#1d7a2e" }} className="font-bold">{effectiveTotal}</span> 个测试库{!disableIgnoreList && hapInfo.ignoreList?.length ? <span style={{ color: "#b45309" }}>（已忆略 {hapInfo.totalLibs - effectiveTotal} 个）</span> : ""} · 点击重新上传</p>
+                          <p className="text-xs text-gray-400">找到 <span style={{ color: "#1d7a2e" }} className="font-bold">{effectiveTotal}</span> 个测试库{!disableIgnoreList && hapInfo.ignoreList?.length ? <span style={{ color: "#b45309" }}>（已忽略 {hapInfo.totalLibs - effectiveTotal} 个）</span> : ""} · 点击重新上传</p>
                         </div>
                         <div className="flex flex-wrap gap-1.5 sm:ml-auto">
                           {hapInfo.archs.map((a) => (
@@ -779,8 +779,15 @@ export default function TestsPage() {
 
           <div className="space-y-4">
             {/* Step 3: 配置参数 */}
-            {hapInfo && (
-              <div className="rounded-2xl p-5 shadow-sm" style={cardStyle}>
+            <div
+              className="rounded-2xl p-5 shadow-sm"
+              style={{
+                ...cardStyle,
+                opacity: hapInfo ? 1 : 0.45,
+                pointerEvents: hapInfo ? "auto" : "none",
+                transition: "opacity 0.2s",
+              }}
+            >
                 <div className="flex items-center gap-3 mb-5">
                   <StepBadge n={3} active={step3Active} done={false} />
                   <h2 className="text-sm font-semibold text-gray-800">测试配置</h2>
@@ -815,9 +822,9 @@ export default function TestsPage() {
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
                         <label className="text-xs font-medium text-gray-500">模块过滤（可多选）</label>
-                        {!disableIgnoreList && (hapInfo.ignoreList ?? []).length > 0 && hapInfo.totalLibs > effectiveTotal && (
+                        {!disableIgnoreList && (hapInfo?.ignoreList ?? []).length > 0 && (hapInfo?.totalLibs ?? 0) > effectiveTotal && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: "rgba(245,158,11,0.12)", color: "#b45309" }}>
-                            已忆略 {hapInfo.totalLibs - effectiveTotal} 个库
+                            已忆略 {(hapInfo?.totalLibs ?? 0) - effectiveTotal} 个库
                           </span>
                         )}
                       </div>
@@ -932,7 +939,6 @@ export default function TestsPage() {
                   </div>
                 </div>
               </div>
-            )}
 
             {/* 启动按钮 */}
             <div className="mt-5">
