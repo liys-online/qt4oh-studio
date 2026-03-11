@@ -82,6 +82,8 @@ export default function TestResultsList({
 }: Props) {
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterModule, setFilterModule] = useState("all");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
 
   const baseResults = excludePending ? results.filter((r) => r.status !== "pending") : results;
   const modules: string[] = ["all", ...Array.from(new Set(results.map((r) => r.module)))];
@@ -91,6 +93,10 @@ export default function TestResultsList({
     const matchModule = filterModule === "all" || r.module === filterModule;
     return matchStatus && matchModule;
   });
+
+  const enablePaging = !fillHeight;
+  const totalPages = enablePaging ? Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)) : 1;
+  const paginatedResults = enablePaging ? filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE) : filtered;
 
   const outerStyle: React.CSSProperties = fillHeight
     ? { ...glass, display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }
@@ -129,7 +135,7 @@ export default function TestResultsList({
             return (
               <button
                 key={s}
-                onClick={() => setFilterStatus(s)}
+                onClick={() => { setFilterStatus(s); setPage(1); }}
                 style={{
                   padding: "5px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600,
                   border: "none", cursor: "pointer", transition: "all 0.15s",
@@ -150,7 +156,7 @@ export default function TestResultsList({
             return (
               <button
                 key={m}
-                onClick={() => setFilterModule(m)}
+                onClick={() => { setFilterModule(m); setPage(1); }}
                 style={{
                   padding: "5px 14px", borderRadius: 20, fontSize: 12, fontWeight: 500,
                   border: "none", cursor: "pointer", transition: "all 0.15s",
@@ -182,7 +188,7 @@ export default function TestResultsList({
         )}
 
         {/* 结果行 */}
-        {filtered.map((result) => {
+        {paginatedResults.map((result) => {
           const rs = statusStyle[result.status] ?? { bg: "rgba(148,163,184,0.1)", text: "#64748b", label: result.status, dot: "#94a3b8" };
           const isRunning = result.status === "running";
           const cmdLogs = logData?.[result.id] ?? [];
@@ -400,6 +406,102 @@ export default function TestResultsList({
         })}
 
         {listEndRef && <div ref={listEndRef} />}
+
+        {/* 分页控件 */}
+        {enablePaging && totalPages > 1 && (
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+            padding: "12px 0 4px",
+          }}>
+            <button
+              onClick={() => setPage(1)}
+              disabled={page === 1}
+              style={{
+                width: 28, height: 28, borderRadius: 8, fontSize: 12, fontWeight: 600,
+                border: "none", cursor: page === 1 ? "not-allowed" : "pointer",
+                background: page === 1 ? "rgba(148,163,184,0.1)" : "rgba(65,205,82,0.1)",
+                color: page === 1 ? "#cbd5e1" : "#1d7a2e",
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+              }}
+            >
+              «
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              style={{
+                width: 28, height: 28, borderRadius: 8, fontSize: 12, fontWeight: 600,
+                border: "none", cursor: page === 1 ? "not-allowed" : "pointer",
+                background: page === 1 ? "rgba(148,163,184,0.1)" : "rgba(65,205,82,0.1)",
+                color: page === 1 ? "#cbd5e1" : "#1d7a2e",
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+              }}
+            >
+              ‹
+            </button>
+
+            {/* 页码按钮：最多显示 5 个 */}
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+              .reduce<(number | "...")[]>((acc, p, i, arr) => {
+                if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push("...");
+                acc.push(p);
+                return acc;
+              }, [])
+              .map((p, i) =>
+                p === "..." ? (
+                  <span key={`ellipsis-${i}`} style={{ fontSize: 12, color: "#94a3b8", padding: "0 2px" }}>…</span>
+                ) : (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p as number)}
+                    style={{
+                      width: 28, height: 28, borderRadius: 8, fontSize: 12, fontWeight: 600,
+                      border: "none", cursor: "pointer",
+                      background: page === p ? "rgba(65,205,82,0.85)" : "rgba(255,255,255,0.7)",
+                      color: page === p ? "#fff" : "#64748b",
+                      boxShadow: page === p ? "0 2px 8px rgba(65,205,82,0.3)" : "none",
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {p}
+                  </button>
+                )
+              )}
+
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              style={{
+                width: 28, height: 28, borderRadius: 8, fontSize: 12, fontWeight: 600,
+                border: "none", cursor: page === totalPages ? "not-allowed" : "pointer",
+                background: page === totalPages ? "rgba(148,163,184,0.1)" : "rgba(65,205,82,0.1)",
+                color: page === totalPages ? "#cbd5e1" : "#1d7a2e",
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+              }}
+            >
+              ›
+            </button>
+            <button
+              onClick={() => setPage(totalPages)}
+              disabled={page === totalPages}
+              style={{
+                width: 28, height: 28, borderRadius: 8, fontSize: 12, fontWeight: 600,
+                border: "none", cursor: page === totalPages ? "not-allowed" : "pointer",
+                background: page === totalPages ? "rgba(148,163,184,0.1)" : "rgba(65,205,82,0.1)",
+                color: page === totalPages ? "#cbd5e1" : "#1d7a2e",
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+              }}
+            >
+              »
+            </button>
+
+            <span style={{ fontSize: 11, color: "#94a3b8", marginLeft: 4 }}>
+              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} / {filtered.length}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

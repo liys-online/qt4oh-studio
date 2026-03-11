@@ -39,7 +39,7 @@ export async function parseHap(
         entryPath.endsWith('.so')
       ) {
         const fileName = path.basename(entryPath);
-        if (!fileName.startsWith('libtst_')) { continue; }
+        if (!fileName.startsWith('lib')) { continue; }
 
         // 相对于 libs/{arch}/ 的路径
         const relativePath = entryPath.slice(prefix.length);

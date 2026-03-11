@@ -96,6 +96,7 @@ export default function TestsPage() {
   const [gcDownloadProgress, setGcDownloadProgress] = useState<{ fileName: string; p: number; dl: number; total: number } | null>(null);
   const [gcCachedFiles, setGcCachedFiles] = useState<GcCachedFile[]>([]);
   const [gcDeletingFile, setGcDeletingFile] = useState("");
+  const [showCachedModal, setShowCachedModal] = useState(false);
 
   const selectDevice = (id: string) => setSelectedDevice(id);
 
@@ -624,58 +625,23 @@ export default function TestsPage() {
 
                   {/* ── 已下载缓存文件列表 ──────────────────────────────── */}
                   {gcCachedFiles.length > 0 && (
-                    <div className="rounded-xl overflow-hidden" style={{ border: "1.5px solid rgba(16,185,129,0.25)" }}>
-                      <div className="px-4 py-2.5 flex items-center gap-2" style={{ background: "rgba(16,185,129,0.05)", borderBottom: "1px solid rgba(16,185,129,0.15)" }}>
-                        <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                        </svg>
-                        <span className="text-xs font-semibold text-emerald-700">已下载缓存</span>
-                        <span className="text-xs text-gray-400 ml-1">{gcCachedFiles.length} 个文件</span>
-                      </div>
-                      <div className="divide-y divide-black/5">
-                        {gcCachedFiles.map((f) => {
-                          const isSelected = hapInfo?.fileName === f.name;
-                          const isDeleting = gcDeletingFile === f.name;
-                          return (
-                            <div key={f.name} className="flex items-center gap-3 px-4 py-2.5" style={{ background: isSelected ? "rgba(16,185,129,0.04)" : "white" }}>
-                              <svg className="w-4 h-4 shrink-0" style={{ color: isSelected ? "#10b981" : "#64748b" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                              </svg>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-mono text-gray-800 truncate">{f.name}</p>
-                                <p className="text-xs text-gray-400">{fmtBytes(f.size)}</p>
-                              </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                {isSelected ? (
-                                  <span className="text-xs font-medium px-2 py-0.5 rounded-md" style={{ background: "rgba(16,185,129,0.12)", color: "#10b981" }}>已选中</span>
-                                ) : (
-                                  <button
-                                    onClick={() => handleGcDownload("", f.name)}
-                                    disabled={!!gcDownloadProgress || isDeleting}
-                                    className="text-xs font-medium px-2 py-1 rounded-lg transition-all disabled:opacity-40"
-                                    style={{ background: "rgba(65,205,82,0.1)", color: "#1d7a2e", border: "1px solid rgba(65,205,82,0.3)" }}
-                                  >
-                                    选择
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => handleGcDeleteFile(f.name)}
-                                  disabled={isDeleting || !!gcDownloadProgress}
-                                  className="p-1 rounded-lg transition-all disabled:opacity-40 hover:bg-red-50"
-                                  title="删除"
-                                >
-                                  {isDeleting ? <Spinner size="sm" /> : (
-                                    <svg className="w-3.5 h-3.5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                    </svg>
-                                  )}
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    <button
+                      onClick={() => setShowCachedModal(true)}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-left transition-all hover:opacity-80"
+                      style={{ background: "rgba(16,185,129,0.07)", border: "1.5px solid rgba(16,185,129,0.25)" }}
+                    >
+                      <svg className="w-3.5 h-3.5 shrink-0 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                      </svg>
+                      <span className="text-xs font-semibold text-emerald-700">已下载缓存</span>
+                      <span className="text-xs text-gray-400 ml-0.5">{gcCachedFiles.length} 个文件</span>
+                      {hapInfo && gcCachedFiles.some((f) => f.name === hapInfo.fileName) && (
+                        <span className="text-xs px-1.5 py-0.5 rounded-md ml-auto shrink-0" style={{ background: "rgba(16,185,129,0.12)", color: "#10b981" }}>已选中</span>
+                      )}
+                      <svg className="w-3.5 h-3.5 text-gray-400 ml-auto shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
                   )}
 
                   {/* ── Releases 列表 ────────────────────────────────────── */}
@@ -824,7 +790,7 @@ export default function TestsPage() {
                         <label className="text-xs font-medium text-gray-500">模块过滤（可多选）</label>
                         {!disableIgnoreList && (hapInfo?.ignoreList ?? []).length > 0 && (hapInfo?.totalLibs ?? 0) > effectiveTotal && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: "rgba(245,158,11,0.12)", color: "#b45309" }}>
-                            已忆略 {(hapInfo?.totalLibs ?? 0) - effectiveTotal} 个库
+                            已忽略 {(hapInfo?.totalLibs ?? 0) - effectiveTotal} 个库
                           </span>
                         )}
                       </div>
@@ -1053,6 +1019,82 @@ export default function TestsPage() {
           </div>
         </div>
       </div>
+
+      {/* ── 已下载缓存弹窗 ────────────────────────────────────────────────── */}
+      {showCachedModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }}
+          onClick={() => setShowCachedModal(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden"
+            style={{ background: "white" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 弹窗标题 */}
+            <div className="flex items-center gap-3 px-5 py-4" style={{ borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
+              <svg className="w-4 h-4 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+              </svg>
+              <h3 className="text-sm font-semibold text-gray-800 flex-1">已下载缓存</h3>
+              <span className="text-xs text-gray-400">{gcCachedFiles.length} 个文件</span>
+              <button
+                onClick={() => setShowCachedModal(false)}
+                className="ml-2 p-1 rounded-lg hover:bg-gray-100 transition-all"
+              >
+                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {/* 文件列表 */}
+            <div className="divide-y divide-black/5 max-h-[60vh] overflow-y-auto">
+              {gcCachedFiles.map((f) => {
+                const isSelected = hapInfo?.fileName === f.name;
+                const isDeleting = gcDeletingFile === f.name;
+                return (
+                  <div key={f.name} className="flex items-center gap-3 px-5 py-3" style={{ background: isSelected ? "rgba(16,185,129,0.04)" : "white" }}>
+                    <svg className="w-4 h-4 shrink-0" style={{ color: isSelected ? "#10b981" : "#64748b" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-mono text-gray-800 truncate">{f.name}</p>
+                      <p className="text-xs text-gray-400">{fmtBytes(f.size)}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {isSelected ? (
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-md" style={{ background: "rgba(16,185,129,0.12)", color: "#10b981" }}>已选中</span>
+                      ) : (
+                        <button
+                          onClick={() => { handleGcDownload("", f.name); setShowCachedModal(false); }}
+                          disabled={!!gcDownloadProgress || isDeleting}
+                          className="text-xs font-medium px-2 py-1 rounded-lg transition-all disabled:opacity-40"
+                          style={{ background: "rgba(65,205,82,0.1)", color: "#1d7a2e", border: "1px solid rgba(65,205,82,0.3)" }}
+                        >
+                          选择
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleGcDeleteFile(f.name)}
+                        disabled={isDeleting || !!gcDownloadProgress}
+                        className="p-1 rounded-lg transition-all disabled:opacity-40 hover:bg-red-50"
+                        title="删除"
+                      >
+                        {isDeleting ? <Spinner size="sm" /> : (
+                          <svg className="w-3.5 h-3.5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
