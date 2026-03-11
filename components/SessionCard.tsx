@@ -20,12 +20,16 @@ interface SessionCardProps {
   session: SessionCardData;
   /** 点击整行跳转的目标路由 */
   href: string;
+  /** 提供时：点击整行变为「选中」，不再直接跳转 */
+  onSelect?: (id: string) => void;
+  /** 当前是否选中 */
+  selected?: boolean;
   /** 提供时显示删除按钮 */
   onDelete?: (e: React.MouseEvent, id: string) => void;
   deletingId?: string | null;
 }
 
-export function SessionCard({ session: s, href, onDelete, deletingId }: SessionCardProps) {
+export function SessionCard({ session: s, href, onSelect, selected, onDelete, deletingId }: SessionCardProps) {
   const router = useRouter();
   const isRunning = s.status === "running";
   const isCompleted = s.status === "completed";
@@ -41,12 +45,16 @@ export function SessionCard({ session: s, href, onDelete, deletingId }: SessionC
     <div
       role="button"
       tabIndex={0}
-      onClick={() => router.push(href)}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); router.push(href); } }}
+      onClick={() => onSelect ? onSelect(s.id) : router.push(href)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect ? onSelect(s.id) : router.push(href); } }}
       className="w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:scale-[1.01] cursor-pointer"
       style={{
-        background: isRunning ? "linear-gradient(135deg,rgba(65,205,82,0.07),rgba(33,168,52,0.06))" : "rgba(0,0,0,0.02)",
-        border: isRunning ? "1.5px solid rgba(65,205,82,0.25)" : "1px solid rgba(0,0,0,0.06)",
+        background: selected
+          ? "linear-gradient(135deg,rgba(65,205,82,0.12),rgba(33,168,52,0.08))"
+          : isRunning ? "linear-gradient(135deg,rgba(65,205,82,0.07),rgba(33,168,52,0.06))" : "rgba(0,0,0,0.02)",
+        border: selected
+          ? "1.5px solid rgba(65,205,82,0.45)"
+          : isRunning ? "1.5px solid rgba(65,205,82,0.25)" : "1px solid rgba(0,0,0,0.06)",
       }}
     >
       {/* 左侧状态图标 */}
@@ -123,10 +131,20 @@ export function SessionCard({ session: s, href, onDelete, deletingId }: SessionC
         </button>
       )}
 
-      {/* 箭头 */}
-      <svg className="w-4 h-4 text-gray-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-      </svg>
+      {/* 选中时：查看详情按钮；否则：箭头 */}
+      {selected && onSelect ? (
+        <button
+          onClick={(e) => { e.stopPropagation(); router.push(href); }}
+          className="shrink-0 text-xs font-semibold px-3 py-1 rounded-lg transition-all hover:opacity-80"
+          style={{ background: "rgba(65,205,82,0.15)", color: "#1d7a2e" }}
+        >
+          查看详情
+        </button>
+      ) : (
+        <svg className="w-4 h-4 text-gray-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      )}
     </div>
   );
 }

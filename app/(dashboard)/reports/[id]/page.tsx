@@ -3,9 +3,43 @@
 import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Spinner } from "@heroui/react";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, LabelList,
+} from "recharts";
 import { sessionStatusStyle } from "@/lib/status";
 import { formatDateTime } from "@/lib/utils";
 import TestResultsList from "@/components/TestResultsList";
+
+// ---------- 模块图表 Tooltip ----------
+function ModuleTooltip({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number; fill: string }[]; label?: string }) {
+  if (!active || !payload?.length) return null;
+  const total = payload.reduce((s, p) => s + (p.value ?? 0), 0);
+  return (
+    <div style={{
+      background: "rgba(255,255,255,0.97)", border: "1px solid rgba(0,0,0,0.08)",
+      borderRadius: 10, padding: "10px 14px", fontSize: 12, boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
+    }}>
+      <p style={{ fontWeight: 700, color: "#1d252c", marginBottom: 6, fontFamily: "monospace" }}>{label}</p>
+      {payload.map((p) => (
+        <div key={p.name} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 2 }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: p.fill, flexShrink: 0 }} />
+          <span style={{ color: "#64748b" }}>{p.name}</span>
+          <span style={{ marginLeft: "auto", fontWeight: 700, color: "#1d252c" }}>{p.value}</span>
+        </div>
+      ))}
+      {total > 0 && (
+        <div style={{ borderTop: "1px solid rgba(0,0,0,0.06)", marginTop: 6, paddingTop: 6, display: "flex", justifyContent: "space-between" }}>
+          <span style={{ color: "#94a3b8" }}>通过率</span>
+          <span style={{ fontWeight: 800, color: "#10b981" }}>
+            {Math.round(((payload[0]?.value ?? 0) / total) * 100)}%
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 interface TestResult {
   id: string;
@@ -231,6 +265,20 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
     ? Math.round((summary.success / summary.total) * 100)
     : 0;
 
+  // 按模块聚合
+  const byModule: Record<string, { total: number; success: number; failed: number; timeout: number; crash: number }> = {};
+  for (const r of session.results) {
+    const m = r.module || "未知";
+    byModule[m] ??= { total: 0, success: 0, failed: 0, timeout: 0, crash: 0 };
+    byModule[m].total++;
+    if (r.status === "success") byModule[m].success++;
+    else if (r.status === "failed" || r.status === "interrupted") byModule[m].failed++;
+    else if (r.status === "timeout") byModule[m].timeout++;
+    else if (r.status === "crash") byModule[m].crash++;
+  }
+  const moduleStats = Object.entries(byModule).map(([module, stats]) => ({ module, ...stats }));
+  const chartHeight = Math.max(180, moduleStats.length * 40 + 40);
+
   const sStyle = sessionStatusStyle[session.status] ?? { bg: "rgba(148,163,184,0.15)", text: "#64748b", label: session.status };
 
   const glass = {
@@ -394,6 +442,65 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* 各模块测试结果图表 */}
+      {moduleStats.length > 0 && (
+        <div style={{ ...glass, padding: "16px 20px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#1d252c" }}>各模块测试结果</span>
+            <div style={{ display: "flex", gap: 12 }}>
+              {[
+                { label: "通过", color: "#10b981" },
+                { label: "超时", color: "#f59e0b" },
+                { label: "崩溃", color: "#ef4444" },
+                { label: "失败", color: "#94a3b8" },
+              ].map((l) => (
+                <div key={l.label} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#94a3b8" }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 2, background: l.color, display: "inline-block" }} />
+                  {l.label}
+                </div>
+              ))}
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={chartHeight}>
+            <BarChart
+              data={moduleStats}
+              layout="vertical"
+              margin={{ top: 0, right: 40, left: 0, bottom: 0 }}
+              barSize={16}
+            >
+              <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
+              <XAxis
+                type="number"
+                tick={{ fontSize: 11, fill: "#94a3b8" }}
+                axisLine={false}
+                tickLine={false}
+                allowDecimals={false}
+              />
+              <YAxis
+                type="category"
+                dataKey="module"
+                width={120}
+                tick={{ fontSize: 11, fill: "#374151", fontFamily: "monospace" }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip content={<ModuleTooltip />} cursor={{ fill: "rgba(65,205,82,0.04)" }} />
+              <Bar dataKey="success" name="通过" stackId="a" fill="#10b981">
+                <LabelList
+                  dataKey="success"
+                  position="insideRight"
+                  style={{ fontSize: 10, fill: "#fff", fontWeight: 700 }}
+                  formatter={(v: unknown) => (typeof v === "number" && v > 0) ? v : ""}
+                />
+              </Bar>
+              <Bar dataKey="timeout" name="超时" stackId="a" fill="#f59e0b" />
+              <Bar dataKey="crash"   name="崩溃" stackId="a" fill="#ef4444" />
+              <Bar dataKey="failed"  name="失败" stackId="a" fill="#94a3b8" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       )}
 
