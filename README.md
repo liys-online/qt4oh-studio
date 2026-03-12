@@ -104,3 +104,27 @@ npm run electron:build
 ## 许可
 
 MIT
+
+## 多语言支持（i18n）
+
+项目已加入一个轻量级的客户端多语言支持实现（无额外依赖）。实现要点：
+
+- 本地化 JSON 文件放在 `public/locales/{locale}.json`（示例已包含 `en.json` 与 `zh.json`）。
+- 在 `app/i18n.tsx` 中提供了 `I18nProvider` 与 `useTranslation()` Hook。已在 `app/providers.tsx` 中挂载 `I18nProvider`。
+- 使用示例：
+
+```tsx
+import { useTranslation } from "./i18n";
+
+function MyComponent() {
+	const { t, locale, setLocale, ready } = useTranslation();
+	if (!ready) return null;
+	return (
+		<div>
+			<h1>{t("site.welcome", "Welcome")}</h1>
+			<button onClick={() => setLocale(locale === "zh" ? "en" : "zh")}>切换语言</button>
+		</div>
+	);
+}
+```
+
