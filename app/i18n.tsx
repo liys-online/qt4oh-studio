@@ -14,8 +14,10 @@ type I18nContextValue = {
 const I18nContext = createContext<I18nContextValue | undefined>(undefined);
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocale] = useState<string>(() => {
-    if (typeof navigator !== "undefined") {
+  const [locale, setLocaleState] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const stored = window.localStorage.getItem("locale");
+      if (stored) return stored;
       const nav = navigator.language || "zh";
       return nav.split("-")[0];
     }
@@ -49,9 +51,18 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     };
   }, [locale]);
 
+  useEffect(() => {
+    try {
+      if (typeof document !== "undefined") document.documentElement.lang = locale;
+      if (typeof window !== "undefined") window.localStorage.setItem("locale", locale);
+    } catch (e) {}
+  }, [locale]);
+
   const t = (key: string, fallback = "") => {
     return messages[key] ?? fallback ?? key;
   };
+
+  const setLocale = (l: string) => setLocaleState(l);
 
   return (
     <I18nContext.Provider value={{ locale, t, setLocale, ready }}>

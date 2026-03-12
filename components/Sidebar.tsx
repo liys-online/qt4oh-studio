@@ -24,7 +24,7 @@ interface SidebarProps {
 export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const pathname  = usePathname();
   const router    = useRouter();
-  const { t } = useTranslation();
+  const { t, locale, setLocale } = useTranslation();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [isElectron, setIsElectron] = useState(false);
 
@@ -200,6 +200,26 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           </div>
         ))}
       </nav>
+
+      {/* Settings panel */}
+      <div style={{ margin: "0 12px 12px" }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(148,163,184,0.6)", marginBottom: 8 }}>{t("settings.title", "Settings")}</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.02)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#34d399" }} />
+            <div style={{ fontSize: 13, color: "rgba(210,240,215,0.9)" }}>{t("settings.language", "Language")}</div>
+          </div>
+          <select
+            id="locale-select"
+            value={locale}
+            onChange={(e) => setLocale(e.target.value)}
+            style={{ background: "transparent", color: "white", border: "1px solid rgba(255,255,255,0.06)", padding: "6px 8px", borderRadius: 8 }}
+          >
+            <option value="en">English</option>
+            <option value="zh">中文</option>
+          </select>
+        </div>
+      </div>
 
       {/* User Info — Web 模式显示登录用户；Electron 本地模式显示离线徽标 */}
           {isElectron ? (

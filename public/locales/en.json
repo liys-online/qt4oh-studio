@@ -19,7 +19,9 @@
   "user.role.user": "User",
   "auth.logout": "Logout",
   "footer.running": "v1.0.0 running",
-  "footer.brand": "Qt for OpenHarmony"
+  "footer.brand": "Qt for OpenHarmony",
+  "settings.title": "Settings",
+  "settings.language": "Language"
   ,
   "loading": "Loading...",
   "button.newTest": "New Test",
