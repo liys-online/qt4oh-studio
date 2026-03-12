@@ -8,6 +8,7 @@ interface SessionUser {
   username: string;
   displayName: string;
   role: string;
+  isElectron?: boolean;
 }
 
 interface SidebarProps {
@@ -108,11 +109,19 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const pathname  = usePathname();
   const router    = useRouter();
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [isElectron, setIsElectron] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me")
       .then(r => r.ok ? r.json() : null)
-      .then(d => d && setUser(d))
+      .then(d => {
+        if (!d) return;
+        if (d.isElectron) {
+          setIsElectron(true);
+        } else {
+          setUser(d);
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -220,8 +229,28 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         ))}
       </nav>
 
-      {/* User Info */}
-      {user && (
+      {/* User Info — Web 模式显示登录用户；Electron 本地模式显示离线徽标 */}
+      {isElectron ? (
+        <div style={{
+          position: "relative", margin: "0 12px 8px", borderRadius: 12, padding: "10px 14px",
+          background: "rgba(65,205,82,0.08)", border: "1px solid rgba(65,205,82,0.2)",
+          display: "flex", alignItems: "center", gap: 10,
+        }}>
+          <div style={{
+            width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
+            background: "linear-gradient(135deg, #334155, #1e293b)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="rgba(210,240,215,0.8)" strokeWidth={1.8}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 600, color: "white", margin: 0 }}>本地模式</p>
+            <p style={{ fontSize: 11, color: "rgba(148,163,184,0.7)", margin: 0 }}>离线运行，无需登录</p>
+          </div>
+        </div>
+      ) : user ? (
         <div style={{
           position: "relative", margin: "0 12px 8px", borderRadius: 12, padding: "10px 12px",
           background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
@@ -264,7 +293,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
             </svg>
           </button>
         </div>
-      )}
+      ) : null}
 
       {/* Footer */}
       <div style={{

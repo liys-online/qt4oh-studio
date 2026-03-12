@@ -47,7 +47,7 @@ function startNextServer(): Promise<void> {
 
     nextProcess = spawn(cmd, args, {
       cwd: unpackedPath,
-      env: { ...process.env, PORT: String(PORT), APP_DATA_DIR: app.getPath("userData") },
+      env: { ...process.env, PORT: String(PORT), APP_DATA_DIR: app.getPath("userData"), ELECTRON_MODE: "1" },
       stdio: "pipe",
     });
 

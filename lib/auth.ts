@@ -9,6 +9,11 @@ import { cookies } from "next/headers";
 const COOKIE_NAME = "qt4oh_session";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 天
 
+/** 是否运行在 Electron 离线模式（由 Electron 主进程注入 ELECTRON_MODE=1） */
+export function isElectronMode(): boolean {
+  return process.env.ELECTRON_MODE === "1";
+}
+
 function getSecret(): Uint8Array {
   const secret = process.env.JWT_SECRET ?? "qt4oh-studio-default-jwt-secret-2026";
   return new TextEncoder().encode(secret);

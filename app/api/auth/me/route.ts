@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getSession, isElectronMode } from "@/lib/auth";
 
 export async function GET() {
+  if (isElectronMode()) {
+    return NextResponse.json({ isElectron: true });
+  }
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "未登录" }, { status: 401 });
@@ -11,5 +14,6 @@ export async function GET() {
     username:    session.username,
     displayName: session.displayName,
     role:        session.role,
+    isElectron:  false,
   });
 }
