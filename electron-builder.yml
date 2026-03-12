@@ -23,8 +23,9 @@ files:
 directories:
   output: release
 
-# macOS 配置（使用 zip 格式，避免下载 dmg-builder）
+# macOS 配置（生成 DMG 安装包）
 mac:
+  icon: public/app-icons/icon.icns
   extraResources:
     - from: build/node-${arch}
       to: node
@@ -33,13 +34,14 @@ mac:
     - from: public/hdc/darwin-${arch}/libusb_shared.dylib
       to: libusb_shared.dylib
   target:
-    - target: zip
+    - target: dmg
       arch:
         - arm64
   category: public.app-category.developer-tools
 
 # Windows 配置
 win:
+  icon: public/app-icons/icon.ico
   extraResources:
     - from: build/node.exe
       to: node.exe
@@ -56,6 +58,7 @@ win:
 
 # Linux 配置
 linux:
+  icon: public/app-icons/icon.png
   extraResources:
     - from: build/node-x64
       to: node
