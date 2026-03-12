@@ -30,9 +30,9 @@ mac:
     - from: build/node-${arch}
       to: node
     - from: public/hdc/darwin-${arch}/hdc
-      to: hdc
+      to: app.asar.unpacked/public/hdc/darwin-${arch}/hdc
     - from: public/hdc/darwin-${arch}/libusb_shared.dylib
-      to: libusb_shared.dylib
+      to: app.asar.unpacked/public/hdc/darwin-${arch}/libusb_shared.dylib
   target:
     - target: dmg
       arch:
@@ -46,9 +46,9 @@ win:
     - from: build/node.exe
       to: node.exe
     - from: public/hdc/win-x64/hdc.exe
-      to: hdc.exe
+      to: app.asar.unpacked/public/hdc/win-x64/hdc.exe
     - from: public/hdc/win-x64/libusb_shared.dll
-      to: libusb_shared.dll
+      to: app.asar.unpacked/public/hdc/win-x64/libusb_shared.dll
   target:
     - target: nsis
       arch:
@@ -63,9 +63,9 @@ linux:
     - from: build/node-x64
       to: node
     - from: public/hdc/linux-x64/hdc
-      to: hdc
+      to: app.asar.unpacked/public/hdc/linux-x64/hdc
     - from: public/hdc/linux-x64/libusb_shared.so
-      to: libusb_shared.so
+      to: app.asar.unpacked/public/hdc/linux-x64/libusb_shared.so
   target:
     - target: AppImage
       arch:
