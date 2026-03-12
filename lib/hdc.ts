@@ -16,16 +16,26 @@ const HDC_ENV_PATH = process.env.HDC_PATH;
 const IS_WINDOWS = process.platform === "win32";
 const HDC_EXE = IS_WINDOWS ? "hdc.exe" : "hdc";
 
+/** 根据当前平台和架构返回 public/hdc 子目录名，如 darwin-arm64 / linux-x64 / win-x64 */
+function getPlatformDir(): string {
+  const plat = process.platform; // darwin / linux / win32
+  const arch = process.arch;     // arm64 / x64
+  if (plat === "win32") return "win-x64";
+  if (plat === "darwin") return `darwin-${arch}`;
+  return `linux-${arch}`;
+}
+
 function resolveBundledHdcPath(): string | null {
+  const platformDir = getPlatformDir();
   const candidates = [
     HDC_ENV_PATH,
+    // Electron 打包后：hdc 通过 extraResources 放在 resourcesPath 根目录
+    process.resourcesPath ? path.join(process.resourcesPath, HDC_EXE) : null,
+    // 开发模式：按平台子目录查找
+    path.join(process.cwd(), "public", "hdc", platformDir, HDC_EXE),
+    // 兼容旧的平铺结构
     path.join(process.cwd(), "public", HDC_EXE),
     path.join(process.cwd(), HDC_EXE),
-    process.resourcesPath ? path.join(process.resourcesPath, HDC_EXE) : null,
-    // macOS: also check inside app bundle Resources
-    !IS_WINDOWS && process.resourcesPath
-      ? path.join(process.resourcesPath, "app", "public", HDC_EXE)
-      : null,
   ].filter(Boolean) as string[];
 
   for (const p of candidates) {
@@ -50,6 +60,24 @@ function resolveBundledHdcPath(): string | null {
 
 const HDC_BIN = resolveBundledHdcPath() || "hdc";
 
+/**
+ * 构建执行 hdc 时的环境变量。
+ * macOS 需注入 DYLD_LIBRARY_PATH，确保 hdc 能找到同目录下的 libusb_shared.dylib。
+ */
+function buildHdcEnv(): NodeJS.ProcessEnv {
+  if (process.platform !== "darwin" || !process.resourcesPath) {
+    return process.env;
+  }
+  const libDir = process.resourcesPath;
+  const existing = process.env.DYLD_LIBRARY_PATH ?? "";
+  return {
+    ...process.env,
+    DYLD_LIBRARY_PATH: existing ? `${libDir}:${existing}` : libDir,
+  };
+}
+
+const HDC_ENV = buildHdcEnv();
+
 function buildHdcCommand(args: string): string {
   // Quote path if it contains spaces
   const bin = HDC_BIN.includes(" ") ? `"${HDC_BIN}"` : HDC_BIN;
@@ -72,6 +100,7 @@ export async function runCommand(
     const { stdout } = await execAsync(cmd, {
       windowsHide: true,
       timeout: 60000,
+      env: HDC_ENV,
     });
     return stdout.trim();
   } catch (e: unknown) {
@@ -420,7 +449,7 @@ export function spawnCommand(
   onData: (data: string) => void,
   onClose: (code: number) => void
 ) {
-  const proc = spawn(cmd, args, { windowsHide: true });
+  const proc = spawn(cmd, args, { windowsHide: true, env: HDC_ENV });
   proc.stdout.on("data", (chunk: Buffer) => onData(chunk.toString()));
   proc.stderr.on("data", (chunk: Buffer) => onData(chunk.toString()));
   proc.on("close", onClose);
@@ -471,7 +500,7 @@ export function spawnHilog(
   if (options.head != null) args.push("-a", String(options.head));
 
   const bin = HDC_BIN;
-  const proc = spawn(bin, args, { windowsHide: true });
+  const proc = spawn(bin, args, { windowsHide: true, env: HDC_ENV });
   proc.stdout.on("data", (chunk: Buffer) => onData(chunk.toString()));
   proc.stderr.on("data", (chunk: Buffer) => onData(chunk.toString()));
   proc.on("close", onClose);

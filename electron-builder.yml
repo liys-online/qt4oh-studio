@@ -14,7 +14,8 @@ files:
   - .next/*.json
   - .next/*.js
   - .next/BUILD_ID
-  - public/**/*
+  - "public/**/*"
+  - "!public/hdc/**"
   - package.json
   - next.config.ts
 
@@ -27,6 +28,10 @@ mac:
   extraResources:
     - from: build/node-${arch}
       to: node
+    - from: public/hdc/darwin-${arch}/hdc
+      to: hdc
+    - from: public/hdc/darwin-${arch}/libusb_shared.dylib
+      to: libusb_shared.dylib
   target:
     - target: zip
       arch:
@@ -38,6 +43,10 @@ win:
   extraResources:
     - from: build/node.exe
       to: node.exe
+    - from: public/hdc/win-x64/hdc.exe
+      to: hdc.exe
+    - from: public/hdc/win-x64/libusb_shared.dll
+      to: libusb_shared.dll
   target:
     - target: nsis
       arch:
@@ -50,6 +59,10 @@ linux:
   extraResources:
     - from: build/node-x64
       to: node
+    - from: public/hdc/linux-x64/hdc
+      to: hdc
+    - from: public/hdc/linux-x64/libusb_shared.so
+      to: libusb_shared.so
   target:
     - target: AppImage
       arch:
