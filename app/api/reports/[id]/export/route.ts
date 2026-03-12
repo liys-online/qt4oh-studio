@@ -185,7 +185,7 @@ export async function GET(
     const ws = wb.addWorksheet(safeName(mod));
     ws.columns = [
       { header: "用例名",   width: 36 },
-      { header: "架构",     width: 8  },
+      { header: "架构",     width: 14 },
       { header: "测试函数", width: 44 },
       { header: "状态",     width: 10 },
       { header: "耗时(ms)", width: 12 },
@@ -262,6 +262,15 @@ export async function GET(
         }
       }
     }
+
+    // 状态列（D 列）下拉约束（exceljs 类型定义不完整，用 any 绕过）
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (ws as any).dataValidations.add(`D2:D${ws.rowCount}`, {
+      type: "list",
+      allowBlank: true,
+      formulae: ['"pass,fail,xfail,skip,error"'],
+      showErrorMessage: false,
+    });
 
     // 冻结首行
     ws.views = [{ state: "frozen", xSplit: 0, ySplit: 1 }];

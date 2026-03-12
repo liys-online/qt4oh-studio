@@ -1,7 +1,8 @@
-import { app, BrowserWindow, shell, Menu } from "electron";
+import { app, BrowserWindow, shell, Menu, ipcMain, dialog } from "electron";
 import { spawn, ChildProcess } from "child_process";
 import * as path from "path";
 import * as http from "http";
+import * as https from "https";
 import * as fs from "fs";
 
 const PORT = 3000;
@@ -167,4 +168,30 @@ app.on("before-quit", () => {
     nextProcess.kill();
     nextProcess = null;
   }
+});
+
+// ── IPC：导出 Excel 并弹出原生保存对话框 ─────────────────────────────────────
+ipcMain.handle("save-excel-export", async (_event, sessionId: string, suggestedName: string) => {
+  const win = BrowserWindow.getFocusedWindow() ?? mainWindow;
+
+  const { canceled, filePath: savePath } = await dialog.showSaveDialog(win!, {
+    title: "保存 Excel 报告",
+    defaultPath: suggestedName,
+    filters: [{ name: "Excel 文件", extensions: ["xlsx"] }],
+  });
+  if (canceled || !savePath) return null;
+
+  // 从本地 Next.js server 获取 xlsx 内容
+  const buf = await new Promise<Buffer>((resolve, reject) => {
+    const get = savePath.startsWith("https") ? https.get : http.get;
+    http.get(`http://localhost:${PORT}/api/reports/${encodeURIComponent(sessionId)}/export`, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (c: Buffer) => chunks.push(c));
+      res.on("end", () => resolve(Buffer.concat(chunks)));
+      res.on("error", reject);
+    }).on("error", reject);
+  });
+
+  fs.writeFileSync(savePath, buf);
+  return savePath;
 });

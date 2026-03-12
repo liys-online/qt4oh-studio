@@ -319,21 +319,56 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {/* 导出 Excel 按钮 */}
-          <a
-            href={`/api/reports/${id}/export`}
-            download
+          <button
+            onClick={async () => {
+              const hapName = session.hapFile.replace(/\.hap$/i, "").replace(/[^\w\u4e00-\u9fa5.-]/g, "_");
+              const suggestedName = `测试报告_${hapName}_${id.slice(0, 8)}.xlsx`;
+
+              // Electron 环境：主进程弹框
+              const api = (window as any).electronAPI;
+              if (api?.saveExcelExport) {
+                try { await api.saveExcelExport(id, suggestedName); } catch (e) { console.error("导出失败", e); }
+                return;
+              }
+
+              // 浏览器：优先使用 File System Access API（showSaveFilePicker）
+              const url = `/api/reports/${id}/export`;
+              if (typeof (window as any).showSaveFilePicker === "function") {
+                try {
+                  const fileHandle = await (window as any).showSaveFilePicker({
+                    suggestedName,
+                    types: [{ description: "Excel 文件", accept: { "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"] } }],
+                  });
+                  const res = await fetch(url);
+                  const blob = await res.blob();
+                  const writable = await fileHandle.createWritable();
+                  await writable.write(blob);
+                  await writable.close();
+                } catch (e: any) {
+                  // 用户取消时 name === 'AbortError'，不报错
+                  if (e?.name !== "AbortError") console.error("导出失败", e);
+                }
+                return;
+              }
+
+              // 最终回退：<a download>（浏览器自动决定路径）
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = suggestedName;
+              a.click();
+            }}
             style={{
               display: "inline-flex", alignItems: "center", gap: 6,
               padding: "6px 14px", borderRadius: 10, fontSize: 12, fontWeight: 600,
               background: "rgba(16,185,129,0.08)", color: "#059669",
-              border: "1px solid rgba(16,185,129,0.25)", textDecoration: "none",
+              border: "1px solid rgba(16,185,129,0.25)", cursor: "pointer",
             }}
           >
             <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
             导出 Excel
-          </a>
+          </button>
           {session.status !== "running" && (
             <button
               onClick={() => setShowChangeHap((v) => !v)}
