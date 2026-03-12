@@ -2,6 +2,7 @@
 
 import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Spinner } from "@heroui/react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -9,7 +10,6 @@ import {
 } from "recharts";
 import { sessionStatusStyle } from "@/lib/status";
 import { formatDateTime } from "@/lib/utils";
-import TestResultsList from "@/components/TestResultsList";
 
 // ---------- 模块图表 Tooltip ----------
 function ModuleTooltip({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number; fill: string }[]; label?: string }) {
@@ -93,6 +93,7 @@ interface Session {
 
 export default function ReportDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [selectedCrash, setSelectedCrash] = useState<{ name: string; content: string } | null>(null);
   const [crashLoading, setCrashLoading] = useState(false);
@@ -317,6 +318,22 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          {/* 导出 Excel 按钮 */}
+          <a
+            href={`/api/reports/${id}/export`}
+            download
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "6px 14px", borderRadius: 10, fontSize: 12, fontWeight: 600,
+              background: "rgba(16,185,129,0.08)", color: "#059669",
+              border: "1px solid rgba(16,185,129,0.25)", textDecoration: "none",
+            }}
+          >
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            导出 Excel
+          </a>
           {session.status !== "running" && (
             <button
               onClick={() => setShowChangeHap((v) => !v)}
@@ -449,7 +466,10 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
       {moduleStats.length > 0 && (
         <div style={{ ...glass, padding: "16px 20px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#1d252c" }}>各模块测试结果</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#1d252c" }}>各模块测试结果</span>
+              <span style={{ fontSize: 11, color: "#94a3b8" }}>点击模块查看测试用例</span>
+            </div>
             <div style={{ display: "flex", gap: 12 }}>
               {[
                 { label: "通过", color: "#10b981" },
@@ -470,6 +490,11 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
               layout="vertical"
               margin={{ top: 0, right: 40, left: 0, bottom: 0 }}
               barSize={16}
+              style={{ cursor: "pointer" }}
+              onClick={(data) => {
+                const mod = data?.activeLabel as string | undefined;
+                if (mod) router.push(`/reports/${id}/results?module=${encodeURIComponent(mod)}`);
+              }}
             >
               <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
               <XAxis
@@ -504,15 +529,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
         </div>
       )}
 
-      {/* 测试结果列表（复用共享组件） */}
-      <TestResultsList
-        results={session.results}
-        sessionStatus={session.status}
-        rerunningId={rerunningId}
-        onRerun={(resultId) => handleRerun(resultId, newHapPath || undefined)}
-        onOpenCrash={openCrash}
-        onOpenReport={openReport}
-      />
+
 
       {/* 崩溃日志 Modal（原生实现，避免 HeroUI portal 问题） */}
       {!!selectedCrash && (
