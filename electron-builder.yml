@@ -45,6 +45,17 @@ win:
   signtoolOptions:
     sign: null
 
+# Linux 配置
+linux:
+  extraResources:
+    - from: build/node-x64
+      to: node
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  category: Development
+
 # 安装包配置
 nsis:
   oneClick: false
