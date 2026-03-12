@@ -1,10 +1,11 @@
-name: Build & Release
+name: Build Electron App
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -73,6 +74,7 @@ jobs:
           echo "Bundling Node.js v${NODE_VER} for darwin-arm64"
           curl -fsSL "https://nodejs.org/dist/v${NODE_VER}/node-v${NODE_VER}-darwin-arm64.tar.gz" \
             | tar xz -C /tmp
+          mkdir -p build
           cp "/tmp/node-v${NODE_VER}-darwin-arm64/bin/node" build/node-arm64
           chmod +x build/node-arm64
 
@@ -85,6 +87,7 @@ jobs:
           Invoke-WebRequest -Uri "https://nodejs.org/dist/v${nodeVer}/node-v${nodeVer}-win-x64.zip" `
             -OutFile "$env:TEMP\node.zip"
           Expand-Archive "$env:TEMP\node.zip" -DestinationPath "$env:TEMP\node-tmp"
+          New-Item -ItemType Directory -Force -Path build | Out-Null
           Copy-Item "$env:TEMP\node-tmp\node-v${nodeVer}-win-x64\node.exe" -Destination build\node.exe
 
       - name: Prepare bundled Node.js (Linux x64)
@@ -95,6 +98,7 @@ jobs:
           echo "Bundling Node.js v${NODE_VER} for linux-x64"
           curl -fsSL "https://nodejs.org/dist/v${NODE_VER}/node-v${NODE_VER}-linux-x64.tar.gz" \
             | tar xz -C /tmp
+          mkdir -p build
           cp "/tmp/node-v${NODE_VER}-linux-x64/bin/node" build/node-x64
           chmod +x build/node-x64
 
