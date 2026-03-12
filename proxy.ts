@@ -17,6 +17,13 @@ function getSecret() {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const userAgent = request.headers.get("user-agent") ?? "";
+  const isElectronRequest = userAgent.includes("Electron/");
+
+  // Electron 桌面端离线模式：跳过中间件登录校验
+  if (process.env.ELECTRON_MODE === "1" || isElectronRequest) {
+    return NextResponse.next();
+  }
 
   // Allow public paths through unconditionally
   if (PUBLIC_PATHS.some(p => pathname.startsWith(p))) {
