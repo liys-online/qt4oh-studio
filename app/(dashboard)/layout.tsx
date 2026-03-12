@@ -32,7 +32,7 @@ export default function DashboardLayout({
           >
             <button
               onClick={() => setSidebarOpen(true)}
-              aria-label="打开菜单"
+              aria-label="Open menu"
               style={{
                 background: "none", border: "none", cursor: "pointer",
                 color: "rgba(210,240,215,0.9)", padding: 6, borderRadius: 8,

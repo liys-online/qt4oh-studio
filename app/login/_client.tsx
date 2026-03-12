@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, FormEvent, useEffect, Suspense } from "react";
+import { useTranslation } from "../i18n";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
@@ -12,6 +13,7 @@ function LoginContent() {
   const [error,       setError]       = useState("");
   const [loading,     setLoading]     = useState(false);
   const [oauthLoading, setOauthLoading] = useState<string | null>(null);
+  const { t } = useTranslation();
 
   useEffect(() => {
     const e = searchParams.get("error");
@@ -35,12 +37,12 @@ function LoginContent() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "登录失败");
+        setError(data.error ?? t("error.loginFailed", "Sign in failed"));
       } else {
         router.push("/");
       }
     } catch {
-      setError("请求失败，请检查网络");
+      setError(t("error.requestFailed", "Request failed, check your network"));
     } finally {
       setLoading(false);
     }
@@ -64,8 +66,8 @@ function LoginContent() {
             style={{ borderRadius: 16, objectFit: "contain", flexShrink: 0 }}
           />
           <div>
-            <h1 className="text-2xl font-bold text-gray-800 leading-tight">Qt4OH Studio</h1>
-            <p className="text-sm text-gray-500 mt-0.5">HarmonyOS 设备测试平台</p>
+            <h1 className="text-2xl font-bold text-gray-800 leading-tight">{t("site.title", "Qt4OH Studio")}</h1>
+            <p className="text-sm text-gray-500 mt-0.5">{t("login.subtitle", "HarmonyOS device testing platform")}</p>
           </div>
         </div>
 
@@ -79,12 +81,12 @@ function LoginContent() {
             boxShadow: "0 2px 24px rgba(0,0,0,0.08)",
           }}
         >
-          <h2 className="text-base font-semibold text-gray-800 mb-6">登录账户</h2>
+          <h2 className="text-base font-semibold text-gray-800 mb-6">{t("login.title", "Sign in to your account")}</h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                用户名
+                {t("login.username", "Username")}
               </label>
               <input
                 type="text"
@@ -93,7 +95,7 @@ function LoginContent() {
                 onChange={e => setUsername(e.target.value)}
                 className="w-full rounded-xl px-3 py-2.5 text-sm border outline-none focus:ring-2 focus:ring-green-400 transition-all"
                 style={{ background: "#f8fafc", borderColor: "#e2e8f0", color: "#1e293b" }}
-                placeholder="请输入用户名"
+                placeholder={t("login.usernamePlaceholder", "Enter username")}
                 disabled={loading}
                 required
               />
@@ -101,7 +103,7 @@ function LoginContent() {
 
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                密码
+                {t("login.password", "Password")}
               </label>
               <input
                 type="password"
@@ -110,7 +112,7 @@ function LoginContent() {
                 onChange={e => setPassword(e.target.value)}
                 className="w-full rounded-xl px-3 py-2.5 text-sm border outline-none focus:ring-2 focus:ring-green-400 transition-all"
                 style={{ background: "#f8fafc", borderColor: "#e2e8f0", color: "#1e293b" }}
-                placeholder="请输入密码"
+                placeholder={t("login.passwordPlaceholder", "Enter password")}
                 disabled={loading}
                 required
               />
@@ -141,16 +143,16 @@ function LoginContent() {
                     d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               )}
-              {loading ? "登录中…" : "登 录"}
+              {loading ? t("login.loading", "Signing in...") : t("login.submit", "Sign In")}
             </button>
           </form>
         </div>
 
         {/* OAuth 登录 */}
         <div className="mt-5">
-          <div className="flex items-center gap-3 mb-4">
+            <div className="flex items-center gap-3 mb-4">
             <div className="flex-1 h-px" style={{ background: "#e2e8f0" }} />
-            <span className="text-xs text-gray-400 whitespace-nowrap">或使用第三方账号登录</span>
+            <span className="text-xs text-gray-400 whitespace-nowrap">{t("login.oauthOr", "Or sign in with")}</span>
             <div className="flex-1 h-px" style={{ background: "#e2e8f0" }} />
           </div>
           <div className="grid grid-cols-3 gap-3">
@@ -165,7 +167,7 @@ function LoginContent() {
                 ? <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                 : <img src="/github.svg" alt="GitHub" className="w-5 h-5 object-contain" />
               }
-              GitHub
+              {t("oauth.github", "GitHub")}
             </button>
 
             {/* Gitcode */}
@@ -179,7 +181,7 @@ function LoginContent() {
                 ? <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                 : <img src="/gitcode.png" alt="Gitcode" className="w-5 h-5 object-contain" />
               }
-              Gitcode
+              {t("oauth.gitcode", "Gitcode")}
             </button>
 
             {/* 华为 */}
@@ -193,15 +195,15 @@ function LoginContent() {
                 ? <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                 : <img src="/huawei.svg" alt="HuaWei" className="w-5 h-5 object-contain" />
               }
-              华为账号
+              {t("oauth.huawei", "Huawei")}
             </button>
           </div>
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-5">
-          还没有账户？{" "}
+          {t("auth.noAccount", "Don't have an account?")} {" "}
           <Link href="/register" className="text-green-600 hover:text-green-700 font-medium transition-colors">
-            立即注册
+            {t("login.registerNow", "Register now")}
           </Link>
         </p>
       </div>

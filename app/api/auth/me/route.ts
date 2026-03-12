@@ -7,7 +7,7 @@ export async function GET() {
   }
   const session = await getSession();
   if (!session) {
-    return NextResponse.json({ error: "未登录" }, { status: 401 });
+    return NextResponse.json({ error: "Not logged in" }, { status: 401 });
   }
   return NextResponse.json({
     userId:      session.userId,

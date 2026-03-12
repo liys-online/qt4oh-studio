@@ -59,8 +59,8 @@ export async function POST(req: NextRequest) {
 
     // hapFilePath（直接路径，Electron 模式）优先；否则从 UPLOAD_DIR 拼接 fileName
     const hapFilePath = hapFilePathDirect || (fileName ? path.join(UPLOAD_DIR, fileName) : null);
-    if (!hapFilePath) return NextResponse.json({ error: "缺少 hapFilePath 或 fileName" }, { status: 400 });
-    if (!deviceId) return NextResponse.json({ error: "缺少 deviceId" }, { status: 400 });
+    if (!hapFilePath) return NextResponse.json({ error: "Missing hapFilePath or fileName" }, { status: 400 });
+    if (!deviceId) return NextResponse.json({ error: "Missing deviceId" }, { status: 400 });
     const sessionId = await startTestSession({
       hapFilePath,
       deviceId,

@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "qt4oh-studio | Qt for OpenHarmony 单元测试平台",
-  description: "qt4oh-studio — Qt for OpenHarmony 单元测试自动化执行与报告分析平台",
+  title: "qt4oh-studio | Qt for OpenHarmony Unit Test Platform",
+  description: "qt4oh-studio — Automated unit test execution and reporting for Qt on OpenHarmony",
 };
 
 export default function RootLayout({

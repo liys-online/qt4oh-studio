@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, FormEvent } from "react";
+import { useTranslation } from "../i18n";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -13,6 +14,7 @@ export default function RegisterPageClient() {
   const [error,       setError]       = useState("");
   const [loading,     setLoading]     = useState(false);
   const [oauthLoading, setOauthLoading] = useState<string | null>(null);
+  const { t } = useTranslation();
 
   function handleOAuth(provider: string) {
     setOauthLoading(provider);
@@ -23,7 +25,7 @@ export default function RegisterPageClient() {
     e.preventDefault();
     setError("");
     if (password !== confirm) {
-      setError("两次输入的密码不一致");
+      setError(t("error.passwordMismatch", "Passwords do not match"));
       return;
     }
     setLoading(true);
@@ -34,10 +36,10 @@ export default function RegisterPageClient() {
         body:    JSON.stringify({ username, displayName: displayName || username, password }),
       });
       const data = await res.json();
-      if (!res.ok) setError(data.error ?? "注册失败");
+      if (!res.ok) setError(data.error ?? t("error.registerFailed", "Registration failed"));
       else router.push("/");
     } catch {
-      setError("请求失败，请检查网络");
+      setError(t("error.requestFailed", "Request failed, check your network"));
     } finally {
       setLoading(false);
     }
@@ -60,8 +62,8 @@ export default function RegisterPageClient() {
             style={{ borderRadius: 16, objectFit: "contain", flexShrink: 0 }}
           />
           <div>
-            <h1 className="text-2xl font-bold text-gray-800 leading-tight">Qt4OH Studio</h1>
-            <p className="text-sm text-gray-500 mt-0.5">HarmonyOS 设备测试平台</p>
+            <h1 className="text-2xl font-bold text-gray-800 leading-tight">{t("site.title", "Qt4OH Studio")}</h1>
+            <p className="text-sm text-gray-500 mt-0.5">{t("login.subtitle", "HarmonyOS device testing platform")}</p>
           </div>
         </div>
 
@@ -75,13 +77,13 @@ export default function RegisterPageClient() {
             boxShadow: "0 2px 24px rgba(0,0,0,0.08)",
           }}
         >
-          <h2 className="text-base font-semibold text-gray-800 mb-6">创建账户</h2>
+          <h2 className="text-base font-semibold text-gray-800 mb-6">{t("register.title", "Create account")}</h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* 用户名 */}
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                用户名 <span className="normal-case font-normal text-gray-400">（字母/数字/下划线，3-32 位）</span>
+                {t("register.username", "Username")} <span className="normal-case font-normal text-gray-400">{t("register.usernameNote", "(letters/numbers/underscore, 3-32 chars)")}</span>
               </label>
               <input
                 type="text"
@@ -90,7 +92,7 @@ export default function RegisterPageClient() {
                 onChange={e => setUsername(e.target.value)}
                 className="w-full rounded-xl px-3 py-2.5 text-sm border outline-none focus:ring-2 focus:ring-green-400 transition-all"
                 style={{ background: "#f8fafc", borderColor: "#e2e8f0", color: "#1e293b" }}
-                placeholder="your_username"
+                placeholder={t("register.usernamePlaceholder", "your_username")}
                 disabled={loading}
                 required
               />
@@ -99,7 +101,7 @@ export default function RegisterPageClient() {
             {/* 昵称 */}
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                昵称 <span className="normal-case font-normal text-gray-400">（选填，默认同用户名）</span>
+                {t("register.displayName", "Display name")} <span className="normal-case font-normal text-gray-400">{t("register.displayNameNote", "(optional, defaults to username)")}</span>
               </label>
               <input
                 type="text"
@@ -107,7 +109,7 @@ export default function RegisterPageClient() {
                 onChange={e => setDisplayName(e.target.value)}
                 className="w-full rounded-xl px-3 py-2.5 text-sm border outline-none focus:ring-2 focus:ring-green-400 transition-all"
                 style={{ background: "#f8fafc", borderColor: "#e2e8f0", color: "#1e293b" }}
-                placeholder="显示名称"
+                placeholder={t("register.displayNamePlaceholder", "Display name")}
                 disabled={loading}
               />
             </div>
@@ -115,7 +117,7 @@ export default function RegisterPageClient() {
             {/* 密码 */}
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                密码 <span className="normal-case font-normal text-gray-400">（至少 6 位）</span>
+                {t("register.password", "Password")} <span className="normal-case font-normal text-gray-400">{t("register.passwordNote", "(at least 6 chars)")}</span>
               </label>
               <input
                 type="password"
@@ -124,7 +126,7 @@ export default function RegisterPageClient() {
                 onChange={e => setPassword(e.target.value)}
                 className="w-full rounded-xl px-3 py-2.5 text-sm border outline-none focus:ring-2 focus:ring-green-400 transition-all"
                 style={{ background: "#f8fafc", borderColor: "#e2e8f0", color: "#1e293b" }}
-                placeholder="请设置密码"
+                placeholder={t("register.passwordPlaceholder", "Set a password")}
                 disabled={loading}
                 required
               />
@@ -132,8 +134,8 @@ export default function RegisterPageClient() {
 
             {/* 确认密码 */}
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                确认密码
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                {t("register.confirmPassword", "Confirm password")}
               </label>
               <input
                 type="password"
@@ -142,7 +144,7 @@ export default function RegisterPageClient() {
                 onChange={e => setConfirm(e.target.value)}
                 className="w-full rounded-xl px-3 py-2.5 text-sm border outline-none focus:ring-2 focus:ring-green-400 transition-all"
                 style={{ background: "#f8fafc", borderColor: "#e2e8f0", color: "#1e293b" }}
-                placeholder="再次输入密码"
+                placeholder={t("register.confirmPasswordPlaceholder", "Confirm password")}
                 disabled={loading}
                 required
               />
@@ -171,23 +173,23 @@ export default function RegisterPageClient() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               )}
-              {loading ? "注册中…" : "注 册"}
+              {loading ? t("register.loading", "Signing up...") : t("register.submit", "Register")}
             </button>
           </form>
         </div>
 
         {/* OAuth 快速注册 */}
         <div className="mt-5">
-          <div className="flex items-center gap-3 mb-4">
+            <div className="flex items-center gap-3 mb-4">
             <div className="flex-1 h-px" style={{ background: "#e2e8f0" }} />
-            <span className="text-xs text-gray-400 whitespace-nowrap">或使用第三方账号快速注册</span>
+            <span className="text-xs text-gray-400 whitespace-nowrap">{t("register.oauthOr", "Or register with")}</span>
             <div className="flex-1 h-px" style={{ background: "#e2e8f0" }} />
           </div>
           <div className="grid grid-cols-3 gap-3">
             {[
               { key: "github", label: "GitHub", icon: <img src="/github.svg" alt="GitHub" className="w-5 h-5 object-contain" />, color: "#374151" },
               { key: "gitcode", label: "Gitcode", icon: <img src="/gitcode.png" alt="Gitcode" className="w-5 h-5 object-contain" />, color: "#374151" },
-              { key: "huawei", label: "华为", icon: <img src="/huawei.svg" alt="华为" className="w-5 h-5 object-contain" />, color: "#374151" },
+              { key: "huawei", label: "Huawei", icon: <img src="/huawei.svg" alt="Huawei" className="w-5 h-5 object-contain" />, color: "#374151" },
             ].map(({ key, label, icon, color }) => (
               <button
                 key={key}
@@ -200,16 +202,16 @@ export default function RegisterPageClient() {
                   ? <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                   : icon
                 }
-                {label}
+                {t(`oauth.${key}`, label)}
               </button>
             ))}
           </div>
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-5">
-          已有账户？{" "}
+          {t("auth.hasAccount", "Already have an account?")} {" "}
           <Link href="/login" className="text-green-600 hover:text-green-700 font-medium transition-colors">
-            立即登录
+            {t("auth.loginNow", "Sign in now")}
           </Link>
         </p>
       </div>

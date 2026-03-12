@@ -9,7 +9,7 @@ export async function GET(
 ) {
   const { id } = await params;
   const session = await getSession(id);
-  if (!session) return NextResponse.json({ error: "会话不存在" }, { status: 404 });
+  if (!session) return NextResponse.json({ error: "Session not found" }, { status: 404 });
   return NextResponse.json({ session: stripSessionContent(session) });
 }
 
@@ -32,7 +32,7 @@ export async function PATCH(
       timeout?: number;
       skipInstall?: boolean;
     };
-    if (!resultId) return NextResponse.json({ error: "缺少 resultId" }, { status: 400 });
+    if (!resultId) return NextResponse.json({ error: "Missing resultId" }, { status: 400 });
     await rerunSingleTest(id, resultId, { hapFilePath, deviceId, timeout, skipInstall });
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {
@@ -55,14 +55,14 @@ export async function DELETE(
 
   if (action === "delete") {
     const session = await getSession(id);
-    if (!session) return NextResponse.json({ error: "会话不存在" }, { status: 404 });
+    if (!session) return NextResponse.json({ error: "Session not found" }, { status: 404 });
     if (session.status === "running") {
-      return NextResponse.json({ error: "运行中的会话不能删除" }, { status: 400 });
+      return NextResponse.json({ error: "Cannot delete running session" }, { status: 400 });
     }
     await deleteSession(id);
     return NextResponse.json({ ok: true });
   }
 
   stopSession(id);
-  return NextResponse.json({ message: "已发送停止信号" });
+  return NextResponse.json({ message: "Stop signal sent" });
 }

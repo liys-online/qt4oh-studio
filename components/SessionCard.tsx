@@ -28,8 +28,10 @@ interface SessionCardProps {
   onDelete?: (e: React.MouseEvent, id: string) => void;
   deletingId?: string | null;
 }
+import { useTranslation } from "../app/i18n";
 
 export function SessionCard({ session: s, href, onSelect, selected, onDelete, deletingId }: SessionCardProps) {
+  const { t } = useTranslation();
   const router = useRouter();
   const isRunning = s.status === "running";
   const isCompleted = s.status === "completed";
@@ -91,7 +93,7 @@ export function SessionCard({ session: s, href, onSelect, selected, onDelete, de
           <SessionStatusBadge status={s.status} />
         </div>
         <div className="flex items-center gap-3 flex-wrap">
-          <p className="text-xs text-gray-400 truncate">设备: {s.deviceId}</p>
+          <p className="text-xs text-gray-400 truncate">{t("label.device", "Device")}: {s.deviceId}</p>
           <p className="text-xs text-gray-400">{formatTime(s.startTime)}</p>
           {total > 0 && (
             <>
@@ -100,6 +102,7 @@ export function SessionCard({ session: s, href, onSelect, selected, onDelete, de
               {crash > 0 && <span className="text-xs" style={{ color: "#ef4444" }}>💥 {crash}</span>}
               {interrupted > 0 && <span className="text-xs" style={{ color: "#b45309" }}>⚡ {interrupted}</span>}
               <span className="text-xs text-gray-400">/ {total}</span>
+                            <span className="text-xs text-gray-400">/ {total}</span>
               {rate !== null && (
                 <span
                   className="text-xs font-bold ml-auto"
@@ -115,11 +118,11 @@ export function SessionCard({ session: s, href, onSelect, selected, onDelete, de
 
       {/* 删除按钮（可选） */}
       {onDelete && !isRunning && (
-        <button
+          <button
           onClick={(e) => { e.stopPropagation(); onDelete(e, s.id); }}
           disabled={deletingId === s.id}
           className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all hover:bg-red-50 text-gray-300 hover:text-red-400 disabled:opacity-50"
-          title="删除记录"
+          title={t("action.deleteRecord", "Delete")}
         >
           {deletingId === s.id ? (
             <Spinner size="sm" />
@@ -138,7 +141,7 @@ export function SessionCard({ session: s, href, onSelect, selected, onDelete, de
           className="shrink-0 text-xs font-semibold px-3 py-1 rounded-lg transition-all hover:opacity-80"
           style={{ background: "rgba(65,205,82,0.15)", color: "#1d7a2e" }}
         >
-          查看详情
+          {t("action.viewDetails", "View Details")}
         </button>
       ) : (
         <svg className="w-4 h-4 text-gray-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">

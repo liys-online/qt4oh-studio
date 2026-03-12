@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useTranslation } from "../app/i18n";
 
 interface SessionUser {
   username: string;
@@ -18,98 +19,69 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
-const navGroups = [
-  {
-    label: null,
-    items: [
-      {
-        href: "/",
-        label: "仪表盘",
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 13a1 1 0 011-1h4a1 1 0 011 1v6a1 1 0 01-1 1h-4a1 1 0 01-1-1v-6z" />
-          </svg>
-        ),
-      },
-      {
-        href: "/devices",
-        label: "设备管理",
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
-          </svg>
-        ),
-      },
-      {
-        href: "/tests",
-        label: "测试执行",
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        ),
-      },
-      {
-        href: "/reports",
-        label: "报告分析",
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-          </svg>
-        ),
-      },
-    ],
-  },
-  {
-    label: "实用工具",
-    items: [
-      {
-        href: "/tools/screenshot",
-        label: "截图工具",
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-        ),
-      },
-      {
-        href: "/tools/logs",
-        label: "日志查看",
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-        ),
-      },
-      {
-        href: "/tools/shell",
-        label: "Shell 终端",
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-        ),
-      },
-      {
-        href: "/tools/power",
-        label: "电源管理",
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
-        ),
-      },
-    ],
-  },
-];
+// navGroups will be constructed inside component to use translations
 
 export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const pathname  = usePathname();
   const router    = useRouter();
+  const { t } = useTranslation();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [isElectron, setIsElectron] = useState(false);
+
+  const navGroups = [
+    {
+      label: null,
+      items: [
+        { href: "/", label: t("nav.dashboard", "Dashboard"), icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 13a1 1 0 011-1h4a1 1 0 011 1v6a1 1 0 01-1 1h-4a1 1 0 01-1-1v-6z" />
+          </svg>
+        )},
+        { href: "/devices", label: t("nav.devices", "Devices"), icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
+          </svg>
+        )},
+        { href: "/tests", label: t("nav.tests", "Tests"), icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        )},
+        { href: "/reports", label: t("nav.reports", "Reports"), icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+        )},
+      ],
+    },
+    {
+      label: t("nav.tools", "Utilities"),
+      items: [
+        { href: "/tools/screenshot", label: t("tools.screenshot", "Screenshot"), icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        )},
+        { href: "/tools/logs", label: t("tools.logs", "Logs"), icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        )},
+        { href: "/tools/shell", label: t("tools.shell", "Shell"), icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+        )},
+        { href: "/tools/power", label: t("tools.power", "Power"), icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+        )},
+      ],
+    },
+  ];
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -170,9 +142,9 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           height={96}
           style={{ borderRadius: 16, objectFit: "contain", flexShrink: 0 }}
         />
-        <div>
-          <p style={{ fontSize: 14, fontWeight: 700, color: "white", lineHeight: 1.2, margin: 0 }}>Qt4OH Studio</p>
-        </div>
+          <div>
+            <p style={{ fontSize: 14, fontWeight: 700, color: "white", lineHeight: 1.2, margin: 0 }}>{t("site.logo", "Qt4OH Studio")}</p>
+          </div>
       </div>
 
       {/* 分隔线 */}
@@ -230,7 +202,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       </nav>
 
       {/* User Info — Web 模式显示登录用户；Electron 本地模式显示离线徽标 */}
-      {isElectron ? (
+          {isElectron ? (
         <div style={{
           position: "relative", margin: "0 12px 8px", borderRadius: 12, padding: "10px 14px",
           background: "rgba(65,205,82,0.08)", border: "1px solid rgba(65,205,82,0.2)",
@@ -246,8 +218,8 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
             </svg>
           </div>
           <div>
-            <p style={{ fontSize: 13, fontWeight: 600, color: "white", margin: 0 }}>本地模式</p>
-            <p style={{ fontSize: 11, color: "rgba(148,163,184,0.7)", margin: 0 }}>离线运行，无需登录</p>
+            <p style={{ fontSize: 13, fontWeight: 600, color: "white", margin: 0 }}>{t("user.localMode", "Local mode")}</p>
+            <p style={{ fontSize: 11, color: "rgba(148,163,184,0.7)", margin: 0 }}>{t("user.localModeDesc", "Offline, no login required")}</p>
           </div>
         </div>
       ) : user ? (
@@ -271,14 +243,14 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                 {user.displayName}
               </p>
               <p style={{ fontSize: 11, color: "rgba(148,163,184,0.7)", margin: 0 }}>
-                {user.role === "admin" ? "管理员" : "普通用户"}
+                {user.role === "admin" ? t("user.role.admin", "Administrator") : t("user.role.user", "User")}
               </p>
             </div>
           </Link>
           {/* Logout */}
-          <button
+            <button
             onClick={handleLogout}
-            title="退出登录"
+            title={t("auth.logout", "Logout")}
             style={{
               flexShrink: 0, background: "none", border: "none", cursor: "pointer",
               color: "rgba(148,163,184,0.6)", padding: 4, borderRadius: 6,
@@ -302,9 +274,9 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#34d399", animation: "pulse 2s infinite" }} />
-          <p style={{ fontSize: 12, fontWeight: 500, color: "rgba(210,240,215,0.9)", margin: 0 }}>v1.0.0 运行中</p>
+          <p style={{ fontSize: 12, fontWeight: 500, color: "rgba(210,240,215,0.9)", margin: 0 }}>{t("footer.running", "v1.0.0 running")}</p>
         </div>
-        <p style={{ fontSize: 11, color: "rgba(148,163,184,0.6)", margin: "4px 0 0" }}>Qt for OpenHarmony</p>
+        <p style={{ fontSize: 11, color: "rgba(148,163,184,0.6)", margin: "4px 0 0" }}>{t("footer.brand", "Qt for OpenHarmony")}</p>
       </div>
     </aside>
     </>

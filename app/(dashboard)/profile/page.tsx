@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, FormEvent } from "react";
+import { useTranslation } from "../../i18n";
 
 interface ProfileData {
   id: number;
@@ -36,6 +37,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 export default function ProfilePage() {
+  const { t, locale } = useTranslation();
   const [profile, setProfile]     = useState<ProfileData | null>(null);
   const [loading, setLoading]     = useState(true);
 
@@ -72,13 +74,13 @@ export default function ProfilePage() {
         body: JSON.stringify({ displayName }),
       });
       const d = await res.json();
-      if (!res.ok) setNameMsg({ ok: false, text: d.error ?? "保存失败" });
+      if (!res.ok) setNameMsg({ ok: false, text: d.error ?? t("profile.saveFailed", "Save failed") });
       else {
         setProfile(prev => prev ? { ...prev, displayName: d.displayName } : prev);
-        setNameMsg({ ok: true, text: "昵称已更新" });
+        setNameMsg({ ok: true, text: t("profile.displayNameUpdated", "Display name updated") });
       }
     } catch {
-      setNameMsg({ ok: false, text: "网络错误" });
+      setNameMsg({ ok: false, text: t("error.network", "Network error") });
     } finally {
       setNameLoading(false);
     }
@@ -88,7 +90,7 @@ export default function ProfilePage() {
     e.preventDefault();
     setPwdMsg(null);
     if (newPwd !== confirmPwd) {
-      setPwdMsg({ ok: false, text: "两次输入的新密码不一致" });
+      setPwdMsg({ ok: false, text: t("error.passwordMismatch", "Passwords do not match") });
       return;
     }
     setPwdLoading(true);
@@ -99,19 +101,19 @@ export default function ProfilePage() {
         body: JSON.stringify({ currentPassword: currentPwd, newPassword: newPwd }),
       });
       const d = await res.json();
-      if (!res.ok) setPwdMsg({ ok: false, text: d.error ?? "修改失败" });
+      if (!res.ok) setPwdMsg({ ok: false, text: d.error ?? t("profile.changePwdFailed", "Change failed") });
       else {
-        setPwdMsg({ ok: true, text: "密码已更新" });
+        setPwdMsg({ ok: true, text: t("profile.passwordUpdated", "Password updated") });
         setCurrentPwd(""); setNewPwd(""); setConfirmPwd("");
       }
     } catch {
-      setPwdMsg({ ok: false, text: "网络错误" });
+      setPwdMsg({ ok: false, text: t("error.network", "Network error") });
     } finally {
       setPwdLoading(false);
     }
   }
 
-  const roleLabel = (r?: string) => r === "admin" ? "管理员" : "普通用户";
+  const roleLabel = (r?: string) => r === "admin" ? t("user.role.admin", "Administrator") : t("user.role.user", "User");
   const roleColor = (r?: string) => r === "admin"
     ? { background: "rgba(65,205,82,0.12)", color: "#21a834", border: "1px solid rgba(65,205,82,0.3)" }
     : { background: "rgba(99,102,241,0.1)", color: "#6366f1", border: "1px solid rgba(99,102,241,0.25)" };
@@ -128,15 +130,15 @@ export default function ProfilePage() {
     <div className="space-y-7 max-w-2xl">
       {/* Header */}
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-800">个人中心</h1>
-        <p className="text-sm text-gray-500 mt-1">查看和修改您的账户信息</p>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-800">{t("profile.title", "Profile")}</h1>
+        <p className="text-sm text-gray-500 mt-1">{t("profile.subtitle", "View and edit your account")}</p>
       </div>
 
       {/* 账户概览 */}
       <Card>
-        <SectionTitle>账户概览</SectionTitle>
+        <SectionTitle>{t("profile.overview", "Account Overview")}</SectionTitle>
         <div className="flex items-center gap-5">
-          {/* 头像 */}
+          {/* Avatar */}
           <div
             className="flex-shrink-0 w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold text-white shadow-md"
             style={{ background: "linear-gradient(135deg,#41CD52,#21a834)" }}
@@ -159,13 +161,13 @@ export default function ProfilePage() {
 
         <div className="mt-5 grid grid-cols-2 gap-3">
           {[
-            { label: "用户名",   value: profile?.username },
-            { label: "角色",     value: roleLabel(profile?.role) },
-            { label: "账户 ID",  value: `#${profile?.id}` },
-            { label: "注册时间", value: profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString("zh-CN") : "—" },
+            { label: "Username",   value: profile?.username },
+            { label: "Role",     value: roleLabel(profile?.role) },
+            { label: "Account ID",  value: `#${profile?.id}` },
+            { label: "Registered", value: profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString(locale || undefined) : "—" },
           ].map(item => (
             <div key={item.label} className="rounded-xl px-4 py-3" style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-              <p className="text-xs text-gray-400 mb-0.5">{item.label}</p>
+                <p className="text-xs text-gray-400 mb-0.5">{item.label}</p>
               <p className="text-sm font-medium text-gray-700">{item.value}</p>
             </div>
           ))}
@@ -174,17 +176,17 @@ export default function ProfilePage() {
 
       {/* 修改昵称 */}
       <Card>
-        <SectionTitle>修改昵称</SectionTitle>
+        <SectionTitle>{t("profile.changeDisplayName", "Change display name")}</SectionTitle>
         <form onSubmit={handleNameSave} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">显示昵称</label>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{t("profile.displayNameLabel", "Display name")}</label>
             <input
               type="text"
               value={displayName}
               onChange={e => setDisplayName(e.target.value)}
               className="w-full rounded-xl px-3 py-2.5 text-sm border outline-none focus:ring-2 focus:ring-green-400 transition-all"
               style={{ background: "#f8fafc", borderColor: "#e2e8f0", color: "#1e293b" }}
-              placeholder="请输入新昵称"
+              placeholder={t("profile.displayNamePlaceholder", "Enter new display name")}
               required
             />
           </div>
@@ -205,26 +207,26 @@ export default function ProfilePage() {
             </div>
           )}
 
-          <button
+            <button
             type="submit"
             disabled={nameLoading}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all shadow hover:shadow-md disabled:opacity-50"
             style={{ background: "linear-gradient(135deg,#41CD52,#21a834)" }}
           >
             {nameLoading && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>}
-            保存昵称
+            {t("profile.saveDisplayName", "Save name")}
           </button>
         </form>
       </Card>
 
-      {/* 修改密码 */}
+      {/* Change password */}
       <Card>
-        <SectionTitle>修改密码</SectionTitle>
+        <SectionTitle>{t("profile.changePassword", "Change password")}</SectionTitle>
         <form onSubmit={handlePwdSave} className="space-y-4">
           {[
-            { label: "当前密码", value: currentPwd, setter: setCurrentPwd, placeholder: "请输入当前密码",  auto: "current-password" },
-            { label: "新密码",   value: newPwd,     setter: setNewPwd,     placeholder: "至少 6 位",      auto: "new-password" },
-            { label: "确认新密码", value: confirmPwd, setter: setConfirmPwd, placeholder: "再次输入新密码", auto: "new-password" },
+            { label: t("profile.currentPassword", "Current password"), value: currentPwd, setter: setCurrentPwd, placeholder: t("profile.currentPasswordPlaceholder", "Enter current password"),  auto: "current-password" },
+            { label: t("profile.newPassword", "New password"),   value: newPwd,     setter: setNewPwd,     placeholder: t("profile.newPasswordPlaceholder", "At least 6 chars"),      auto: "new-password" },
+            { label: t("profile.confirmNewPassword", "Confirm new password"), value: confirmPwd, setter: setConfirmPwd, placeholder: t("profile.confirmNewPasswordPlaceholder", "Confirm new password"), auto: "new-password" },
           ].map(field => (
             <div key={field.label}>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{field.label}</label>
@@ -235,7 +237,7 @@ export default function ProfilePage() {
                 onChange={e => field.setter(e.target.value)}
                 className="w-full rounded-xl px-3 py-2.5 text-sm border outline-none focus:ring-2 focus:ring-green-400 transition-all"
                 style={{ background: "#f8fafc", borderColor: "#e2e8f0", color: "#1e293b" }}
-                placeholder={field.placeholder}
+                placeholder={field.placeholder as string}
                 required
               />
             </div>
@@ -264,7 +266,7 @@ export default function ProfilePage() {
             style={{ background: "linear-gradient(135deg,#41CD52,#21a834)" }}
           >
             {pwdLoading && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>}
-            更新密码
+            {t("profile.updatePassword", "Update password")}
           </button>
         </form>
       </Card>

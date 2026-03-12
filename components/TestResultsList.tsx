@@ -111,7 +111,7 @@ export default function TestResultsList({
       {/* 标题栏 */}
       <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(65,205,82,0.08)", flexShrink: 0 }}>
         <h2 style={{ fontSize: 13, fontWeight: 700, color: "#1d252c", margin: 0 }}>
-          测试结果
+          Test results
           <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 500, color: "#94a3b8" }}>
             ({filtered.length})
           </span>
@@ -144,7 +144,7 @@ export default function TestResultsList({
                   boxShadow: active ? "0 2px 8px rgba(0,0,0,0.08)" : "none",
                 }}
               >
-                {s === "all" ? "全部" : statusStyle[s]?.label ?? s}
+                {s === "all" ? "All" : statusStyle[s]?.label ?? s}
               </button>
             );
           })}
@@ -165,7 +165,7 @@ export default function TestResultsList({
                   boxShadow: active ? "0 2px 8px rgba(0,0,0,0.08)" : "none",
                 }}
               >
-                {m === "all" ? "全部模块" : m}
+                {m === "all" ? "All modules" : m}
               </button>
             );
           })}
@@ -183,7 +183,7 @@ export default function TestResultsList({
         )}
         {results.length > 0 && filtered.length === 0 && (
           <p style={{ textAlign: "center", color: "#94a3b8", fontSize: 13, padding: "32px 0" }}>
-            没有符合条件的结果
+            No matching results
           </p>
         )}
 
@@ -224,10 +224,10 @@ export default function TestResultsList({
                     display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4,
                   }}
                 >
-                  {isRunning ? (
+                      {isRunning ? (
                     <>
                       <Spinner size="sm" color="current" style={{ width: 12, height: 12 }} />
-                      运行中
+                      Running
                     </>
                   ) : rs.label}
                 </span>
@@ -265,8 +265,8 @@ export default function TestResultsList({
                         }}
                         onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(239,68,68,0.2)")}
                         onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(239,68,68,0.12)")}
-                      >
-                        崩溃日志
+                        >
+                        Crash log
                       </button>
                     ))}
                   </div>
@@ -285,7 +285,7 @@ export default function TestResultsList({
                     onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(65,205,82,0.2)")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(65,205,82,0.1)")}
                   >
-                    查看报告
+                    View report
                   </button>
                 )}
 
@@ -305,7 +305,7 @@ export default function TestResultsList({
                       transition: "background 0.15s",
                     }}
                   >
-                    {rerunningId === result.id ? (
+                        {rerunningId === result.id ? (
                       <>
                         <svg
                           style={{ animation: "spin 1s linear infinite" }}
@@ -316,7 +316,7 @@ export default function TestResultsList({
                         </svg>
                         重跑中
                       </>
-                    ) : "重跑"}
+                        ) : "Re-run"}
                   </button>
                 )}
 

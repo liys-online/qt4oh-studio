@@ -8,12 +8,12 @@ export async function POST(req: Request) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "请求格式错误" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid request format" }, { status: 400 });
   }
 
   const { username = "", password = "" } = body;
   if (!username || !password) {
-    return NextResponse.json({ error: "用户名和密码不能为空" }, { status: 400 });
+    return NextResponse.json({ error: "Username and password are required" }, { status: 400 });
   }
 
   try {
@@ -22,12 +22,12 @@ export async function POST(req: Request) {
     const user = await db("users").where({ username }).first();
 
     if (!user) {
-      return NextResponse.json({ error: "用户名或密码错误" }, { status: 401 });
+      return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
     }
 
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) {
-      return NextResponse.json({ error: "用户名或密码错误" }, { status: 401 });
+      return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
     }
 
     await createSession({

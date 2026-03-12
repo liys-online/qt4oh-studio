@@ -16,22 +16,22 @@ export async function POST(req: NextRequest) {
       // Electron 路径模式：直接使用本地文件路径，不读入内存
       const body = await req.json();
       const { localPath, fileName: fn } = body as { localPath?: string; fileName?: string };
-      if (!localPath) return NextResponse.json({ error: "缺少 localPath" }, { status: 400 });
+      if (!localPath) return NextResponse.json({ error: "Missing localPath" }, { status: 400 });
       fileName = fn || path.basename(localPath);
       if (!fileName.endsWith(".hap")) {
-        return NextResponse.json({ error: "请上传 .hap 文件" }, { status: 400 });
+        return NextResponse.json({ error: "Please upload a .hap file" }, { status: 400 });
       }
       if (!fs.existsSync(localPath)) {
-        return NextResponse.json({ error: `文件不存在: ${localPath}` }, { status: 400 });
+        return NextResponse.json({ error: `File does not exist: ${localPath}` }, { status: 400 });
       }
       hapFilePath = localPath;
     } else {
       // FormData 模式（小文件 / 浏览器模式回退）
       const formData = await req.formData();
       const file = formData.get("file") as File | null;
-      if (!file) return NextResponse.json({ error: "未提供文件" }, { status: 400 });
+      if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
       if (!file.name.endsWith(".hap")) {
-        return NextResponse.json({ error: "请上传 .hap 文件" }, { status: 400 });
+        return NextResponse.json({ error: "Please upload a .hap file" }, { status: 400 });
       }
       const buffer = Buffer.from(await file.arrayBuffer());
       fileName = file.name;
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   try {
     const fileName = req.nextUrl.searchParams.get("file");
-    if (!fileName) return NextResponse.json({ error: "缺少 file 参数" }, { status: 400 });
+    if (!fileName) return NextResponse.json({ error: "Missing file parameter" }, { status: 400 });
 
     const filePath = path.join(UPLOAD_DIR, fileName);
     const testLibs = await parseHap(filePath);

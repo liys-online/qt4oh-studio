@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useDevices } from "../devices-context";
 import { SessionCard } from "@/components/SessionCard";
 import { cardStyle } from "@/lib/status";
+import { useTranslation } from "@/app/i18n";
 
 interface HapInfo {
   fileName: string;
@@ -101,10 +102,10 @@ export default function TestsPage() {
   const selectDevice = (id: string) => setSelectedDevice(id);
 
   const handleDeleteAll = async () => {
-    if (!confirm(`确认删除全部 ${historySessions.length} 条历史记录？此操作不可撤销。`)) return;    setDeletingAll(true);
+    if (!confirm(t('confirm.deleteAllHistory', `Confirm delete all ${historySessions.length} history entries? This action cannot be undone.`))) return;    setDeletingAll(true);
     try {
       const res = await fetch("/api/tests", { method: "DELETE" });
-      if (!res.ok) { const d = await res.json(); alert(d.error || "删除失败"); return; }
+      if (!res.ok) { const d = await res.json(); alert(d.error || t('error.deleteFailed','Delete failed')); return; }
       setSessions((prev) => prev.filter((s) => s.status === "running"));
     } finally {
       setDeletingAll(false);
@@ -118,12 +119,15 @@ export default function TestsPage() {
 
   useEffect(() => {
     refreshSessions();
-    // 默认展示 GitCode 选项卡，提前加载数据
+    // Default to GitCode tab; prefetch data
     fetchGcReleases();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 监听 BroadcastChannel — 详情页重跑完成后实时通知列表刷新
+  const { t } = useTranslation();
+
+  // Listen to BroadcastChannel — refresh list when rerun completes in detail page
   useEffect(() => {
     let bc: BroadcastChannel | null = null;
     try {
@@ -168,14 +172,14 @@ export default function TestsPage() {
 
   const uploadFile = async (file: File) => {
     if (!file.name.endsWith(".hap")) {
-      setUploadError("请上传 .hap 格式的文件");
+      setUploadError(t('tests.error.uploadWrongFormat','Please upload a .hap file'));
       return;
     }
     setUploadError("");
     setUploading(true);
     setHapInfo(null);
     try {
-      // Electron 环境：file.path 是本地绝对路径，避免将大文件读入内存
+      // Electron: file.path is absolute local path; avoid reading big files into memory
       const localPath = (file as unknown as { path?: string }).path;
       let res: Response;
       if (localPath) {
@@ -192,10 +196,10 @@ export default function TestsPage() {
       const contentType = res.headers.get("content-type") || "";
       if (!contentType.includes("application/json")) {
         const text = await res.text();
-        throw new Error(`服务器错误 (${res.status}): ${text.slice(0, 300)}`);
+        throw new Error(`Server error (${res.status}): ${text.slice(0, 300)}`);
       }
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "上传失败");
+      if (!res.ok) throw new Error(data.error || "Upload failed");
       setHapInfo(data);
     } catch (e: unknown) {
       setUploadError((e as Error).message);
@@ -239,7 +243,7 @@ export default function TestsPage() {
         fetchGcCachedFiles(),
       ]);
       const data = await relRes.json();
-      if (!relRes.ok) throw new Error(data.error || "获取 releases 失败");
+      if (!relRes.ok) throw new Error(data.error || "Failed to fetch releases");
       setGcReleases(data.releases || []);
       if (data.releases?.length > 0) setGcExpanded(data.releases[0].tag_name);
     } catch (e: unknown) {
@@ -258,7 +262,7 @@ export default function TestsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url, fileName }),
       });
-      if (!res.body) throw new Error("无响应流");
+      if (!res.body) throw new Error("No response stream");
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = "";
@@ -274,14 +278,14 @@ export default function TestsPage() {
             status: string; p?: number; dl?: number; total?: number;
             data?: HapInfo & { size?: number }; message?: string;
           };
-          if (evt.status === "progress") {
+            if (evt.status === "progress") {
             setGcDownloadProgress({ fileName, p: evt.p ?? 0, dl: evt.dl ?? 0, total: evt.total ?? 0 });
           } else if (evt.status === "done" || evt.status === "exists") {
             if (evt.data) setHapInfo(evt.data);
             setGcDownloadProgress(null);
             await fetchGcCachedFiles();
           } else if (evt.status === "error") {
-            throw new Error(evt.message || "下载失败");
+            throw new Error(evt.message || "Download failed");
           }
         }
       }
@@ -292,11 +296,11 @@ export default function TestsPage() {
   };
 
   const handleGcDeleteFile = async (fileName: string) => {
-    if (!confirm(`确认删除已下载的 ${fileName}？`)) return;
+    if (!confirm(t('confirm.deleteDownloaded', `Confirm delete downloaded ${fileName}?`))) return;
     setGcDeletingFile(fileName);
     try {
       const res = await fetch(`/api/gitcode-releases/download?file=${encodeURIComponent(fileName)}`, { method: "DELETE" });
-      if (!res.ok) { const d = await res.json(); alert(d.error || "删除失败"); return; }
+      if (!res.ok) { const d = await res.json(); alert(d.error || "Delete failed"); return; }
       setGcCachedFiles((prev) => prev.filter((f) => f.name !== fileName));
       if (hapInfo?.fileName === fileName) setHapInfo(null);
     } catch (e: unknown) {
@@ -308,13 +312,13 @@ export default function TestsPage() {
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (!confirm("确认删除这条历史记录？")) return;
+    if (!confirm(t('confirm.deleteRecord', 'Confirm delete this history record?'))) return;
     setDeletingId(id);
     try {
       const res = await fetch(`/api/tests/${id}?action=delete`, { method: "DELETE" });
-      if (!res.ok) {
+        if (!res.ok) {
         const d = await res.json();
-        alert(d.error || "删除失败");
+        alert(d.error || t('error.deleteFailed','Delete failed'));
         return;
       }
       setSessions((prev) => prev.filter((s) => s.id !== id));
@@ -347,7 +351,7 @@ export default function TestsPage() {
       if (!res.ok) throw new Error(data.error);
       router.push(`/tests/${data.sessionId}`);
     } catch (e: unknown) {
-      alert("启动失败: " + (e as Error).message);
+      alert(t('error.startFailed','Start failed: ') + (e as Error).message);
     } finally {
       setStarting(false);
     }
@@ -402,16 +406,16 @@ export default function TestsPage() {
       <div className="space-y-7">
         {/* Header */}
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-800">测试执行</h1>
-          <p className="text-sm text-gray-500 mt-1">按步骤配置并启动 Qt 单元测试</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800">{t('tests.title', 'Test Execution')}</h1>
+          <p className="text-sm text-gray-500 mt-1">{t('tests.subtitle', 'Configure and run Qt unit tests step by step')}</p>
         </div>
 
         {/* 步骤进度条 */}
         <div className="flex items-center gap-2">
           {[
-            { n: 1, label: "选择设备", done: step1Done, active: !step1Done },
-            { n: 2, label: "上传 HAP", done: step2Done, active: step1Done && !step2Done },
-            { n: 3, label: "配置参数", done: false, active: step3Active },
+            { n: 1, label: t('tests.step.device', 'Select Device'), done: step1Done, active: !step1Done },
+            { n: 2, label: t('tests.step.upload', 'Upload HAP'), done: step2Done, active: step1Done && !step2Done },
+            { n: 3, label: t('tests.step.config', 'Configure'), done: false, active: step3Active },
           ].map((s, i) => (
             <div key={s.n} className="flex items-center gap-2">
               <div className="flex items-center gap-2">
@@ -433,19 +437,19 @@ export default function TestsPage() {
             <div className="rounded-2xl p-5 shadow-sm" style={cardStyle}>
               <div className="flex items-center gap-3 mb-4">
                 <StepBadge n={1} active={!step1Done} done={step1Done} />
-                <h2 className="text-sm font-semibold text-gray-800">选择目标设备</h2>
+                <h2 className="text-sm font-semibold text-gray-800">{t('tests.step1.title', 'Select Target Device')}</h2>
               </div>
-              {devicesLoading ? (
+                {devicesLoading ? (
                 <div className="flex items-center gap-2 p-3">
                   <Spinner size="sm" />
-                  <span className="text-xs text-gray-400">检测设备中...</span>
+                  <span className="text-xs text-gray-400">{t('tests.devices.detecting', 'Detecting devices...')}</span>
                 </div>
               ) : devices.length === 0 ? (
                 <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)" }}>
                   <svg className="w-4 h-4 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
-                  <p className="text-xs text-amber-700">未检测到设备，请前往设备管理页面检查连接</p>
+                  <p className="text-xs text-amber-700">{t('tests.devices.none', 'No devices found — please check connections in Devices')}</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -471,7 +475,7 @@ export default function TestsPage() {
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className="text-xs font-semibold text-gray-800 truncate">{d.id}</p>
-                            <p className="text-xs text-emerald-600">在线</p>
+                            <p className="text-xs text-emerald-600">{t('tests.device.online','Online')}</p>
                           </div>
                           {isSelected && (
                             <svg className="w-4 h-4 ml-auto shrink-0" style={{ color: "#41CD52" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -484,17 +488,17 @@ export default function TestsPage() {
                             {loadingInfo ? (
                               <div className="flex items-center gap-2">
                                 <Spinner size="sm" />
-                                <span className="text-xs text-gray-400">获取设备信息...</span>
+                                <span className="text-xs text-gray-400">{t('tests.devices.loadingInfo', 'Fetching device info...')}</span>
                               </div>
                             ) : info ? (
                               <div className="flex flex-col gap-1">
                                 {([
-                                  ["名称", info.name],
-                                  ["品牌", info.brand],
-                                  ["型号", info.model],
-                                  ["API 版本", info.apiVersion],
-                                  ["CPU 架构", info.cpuAbiList],
-                                  ["系统版本", info.softwareVersion],
+                                  [t('tests.device.field.name','Name'), info.name],
+                                  [t('tests.device.field.brand','Brand'), info.brand],
+                                  [t('tests.device.field.model','Model'), info.model],
+                                  [t('tests.device.field.api','API Version'), info.apiVersion],
+                                  [t('tests.device.field.cpu','CPU Architecture'), info.cpuAbiList],
+                                  [t('tests.device.field.so','OS Version'), info.softwareVersion],
                                 ] as [string, string | null][]).map(([label, val]) => (
                                   <div key={label} className="flex items-start gap-2">
                                     <span className="text-xs text-gray-400 shrink-0 w-14">{label}</span>
@@ -517,7 +521,7 @@ export default function TestsPage() {
               {/* 标题 + Tab 切换 */}
               <div className="flex items-center gap-3 mb-4">
                 <StepBadge n={2} active={step1Done && !step2Done} done={step2Done} />
-                <h2 className="text-sm font-semibold text-gray-800">选择 HAP 包</h2>
+                <h2 className="text-sm font-semibold text-gray-800">{t('tests.step2.title','Select HAP Package')}</h2>
                 <div className="ml-auto flex rounded-lg overflow-hidden" style={{ border: "1.5px solid rgba(0,0,0,0.1)" }}>
                   {(["gitcode", "local"] as const).map((src) => (
                     <button
@@ -536,7 +540,7 @@ export default function TestsPage() {
                           : { background: "transparent", color: "#64748b" }
                       }
                     >
-                      {src === "local" ? "本地上传" : "GitCode"}
+                      {src === "local" ? t('tests.hap.local','Local Upload') : t('tests.hap.gitcode','GitCode')}
                     </button>
                   ))}
                 </div>
@@ -562,7 +566,7 @@ export default function TestsPage() {
                     {uploading ? (
                       <div className="flex flex-col sm:flex-row items-center gap-4">
                         <Spinner size="md" />
-                        <p className="text-sm text-gray-500">解析 HAP 中，请稍候...</p>
+                        <p className="text-sm text-gray-500">{t('tests.hap.parsing','Parsing HAP, please wait...')}</p>
                       </div>
                     ) : hapInfo ? (
                       <div className="flex flex-col sm:flex-row sm:items-center gap-4">
@@ -573,7 +577,7 @@ export default function TestsPage() {
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-gray-800 truncate">{hapInfo.fileName}</p>
-                          <p className="text-xs text-gray-400">找到 <span style={{ color: "#1d7a2e" }} className="font-bold">{effectiveTotal}</span> 个测试库{!disableIgnoreList && hapInfo.ignoreList?.length ? <span style={{ color: "#b45309" }}>（已忽略 {hapInfo.totalLibs - effectiveTotal} 个）</span> : ""} · 点击重新上传</p>
+                          <p className="text-xs text-gray-400">{t('tests.hap.foundLibs', `Found ${effectiveTotal} test libraries${!disableIgnoreList && hapInfo.ignoreList?.length ? ` (ignored ${hapInfo.totalLibs - effectiveTotal})` : ""} · Click to re-upload`)}</p>
                         </div>
                         <div className="flex flex-wrap gap-1.5 sm:ml-auto">
                           {hapInfo.archs.map((a) => (
@@ -583,7 +587,7 @@ export default function TestsPage() {
                             <span key={m} className="text-xs px-2 py-0.5 rounded-full font-mono" style={{ background: "rgba(0,0,0,0.05)", color: "#64748b" }}>{m}</span>
                           ))}
                           {hapInfo.modules.length > 4 && (
-                            <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(0,0,0,0.05)", color: "#94a3b8" }}>+{hapInfo.modules.length - 4} 个模块</span>
+                            <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(0,0,0,0.05)", color: "#94a3b8" }}>{t('tests.hap.moreModules', `+${hapInfo.modules.length - 4} modules`)}</span>
                           )}
                         </div>
                       </div>
@@ -595,8 +599,8 @@ export default function TestsPage() {
                           </svg>
                         </div>
                         <div>
-                          <p className="text-sm text-gray-600">拖放或 <span style={{ color: "#1d7a2e" }} className="font-semibold">点击上传</span> HAP 文件</p>
-                          <p className="text-xs text-gray-400 mt-1">支持 entry-default-signed.hap</p>
+                          <p className="text-sm text-gray-600">{t('tests.hap.dropOrClick','Drag & drop or ')}<span style={{ color: "#1d7a2e" }} className="font-semibold">{t('tests.hap.clickUpload','click to upload')}</span>{t('tests.hap.hapFile',' HAP file')}</p>
+                          <p className="text-xs text-gray-400 mt-1">{t('tests.hap.supports','Supports entry-default-signed.hap')}</p>
                         </div>
                       </div>
                     )}
@@ -617,8 +621,8 @@ export default function TestsPage() {
                       </div>
                       <p className="text-xs text-gray-400">
                         {gcDownloadProgress.total > 0
-                          ? `${fmtBytes(gcDownloadProgress.dl)} / ${fmtBytes(gcDownloadProgress.total)}`
-                          : `已下载 ${fmtBytes(gcDownloadProgress.dl)}`}
+                          ? t('tests.gc.progress', `${fmtBytes(gcDownloadProgress.dl)} / ${fmtBytes(gcDownloadProgress.total)}`)
+                          : t('tests.gc.downloaded', `Downloaded ${fmtBytes(gcDownloadProgress.dl)}`)}
                       </p>
                     </div>
                   )}
@@ -633,10 +637,10 @@ export default function TestsPage() {
                       <svg className="w-3.5 h-3.5 shrink-0 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                       </svg>
-                      <span className="text-xs font-semibold text-emerald-700">已下载缓存</span>
-                      <span className="text-xs text-gray-400 ml-0.5">{gcCachedFiles.length} 个文件</span>
+                      <span className="text-xs font-semibold text-emerald-700">{t('tests.gc.cached','Cached')}</span>
+                      <span className="text-xs text-gray-400 ml-0.5">{gcCachedFiles.length} {t('tests.gc.files','files')}</span>
                       {hapInfo && gcCachedFiles.some((f) => f.name === hapInfo.fileName) && (
-                        <span className="text-xs px-1.5 py-0.5 rounded-md ml-auto shrink-0" style={{ background: "rgba(16,185,129,0.12)", color: "#10b981" }}>已选中</span>
+                        <span className="text-xs px-1.5 py-0.5 rounded-md ml-auto shrink-0" style={{ background: "rgba(16,185,129,0.12)", color: "#10b981" }}>{t('common.selected','Selected')}</span>
                       )}
                       <svg className="w-3.5 h-3.5 text-gray-400 ml-auto shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -648,19 +652,19 @@ export default function TestsPage() {
                   {gcLoading ? (
                     <div className="flex items-center gap-3 py-4 justify-center">
                       <Spinner size="sm" />
-                      <span className="text-xs text-gray-400">加载 releases 列表...</span>
+                      <span className="text-xs text-gray-400">{t('tests.gc.loading','Loading releases...')}</span>
                     </div>
                   ) : gcError ? (
                     <div className="rounded-xl p-4" style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)" }}>
                       <p className="text-xs text-red-500">{gcError}</p>
-                      <button onClick={fetchGcReleases} className="mt-2 text-xs font-medium" style={{ color: "#41CD52" }}>重试</button>
+                      <button onClick={fetchGcReleases} className="mt-2 text-xs font-medium" style={{ color: "#41CD52" }}>{t('common.retry','Retry')}</button>
                     </div>
                   ) : gcReleases.length === 0 ? (
                     <div className="flex flex-col items-center gap-2 py-8 text-gray-400">
                       <svg className="w-8 h-8 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                       </svg>
-                      <p className="text-xs">暂无可用的 HAP 发布包</p>
+                      <p className="text-xs">{t('tests.gc.noReleases','No available HAP releases')}</p>
                     </div>
                   ) : (
                     gcReleases.map((release) => (
@@ -677,7 +681,7 @@ export default function TestsPage() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-semibold text-gray-800">{release.name || release.tag_name}</p>
-                            <p className="text-xs text-gray-400">{new Date(release.created_at).toLocaleDateString("zh-CN")} · {release.hapAssets.length} 个 HAP</p>
+                            <p className="text-xs text-gray-400">{new Date(release.created_at).toLocaleDateString()} · {release.hapAssets.length} {t('tests.gc.hapCount',' HAP')}</p>
                           </div>
                           <svg
                             className="w-4 h-4 text-gray-400 shrink-0 transition-transform"
@@ -705,10 +709,10 @@ export default function TestsPage() {
                                   </svg>
                                   <span className="flex-1 text-xs font-mono text-gray-700 truncate">{asset.name}</span>
                                   {isCached && !isSelected && (
-                                    <span className="text-xs px-1.5 py-0.5 rounded-md shrink-0" style={{ background: "rgba(65,205,82,0.1)", color: "#1d7a2e" }}>已缓存</span>
+                                    <span className="text-xs px-1.5 py-0.5 rounded-md shrink-0" style={{ background: "rgba(65,205,82,0.1)", color: "#1d7a2e" }}>{t('tests.gc.cachedLabel','Cached')}</span>
                                   )}
                                   {isSelected ? (
-                                    <span className="text-xs font-medium shrink-0" style={{ color: "#10b981" }}>已选中</span>
+                                    <span className="text-xs font-medium shrink-0" style={{ color: "#10b981" }}>{t('common.selected','Selected')}</span>
                                   ) : isActiveDownload ? (
                                     <span className="text-xs text-gray-400 shrink-0">{gcDownloadProgress!.p}%</span>
                                   ) : (
@@ -718,7 +722,7 @@ export default function TestsPage() {
                                       className="text-xs font-medium px-2.5 py-1 rounded-lg transition-all disabled:opacity-40 shrink-0"
                                       style={{ background: "linear-gradient(135deg, rgba(65,205,82,0.12), rgba(33,168,52,0.1))", color: "#1d7a2e", border: "1px solid rgba(65,205,82,0.3)" }}
                                     >
-                                      {isCached ? "选择" : "下载"}
+                                      {isCached ? t('tests.action.select','Select') : t('tests.action.download','Download')}
                                     </button>
                                   )}
                                 </div>
@@ -756,13 +760,13 @@ export default function TestsPage() {
             >
                 <div className="flex items-center gap-3 mb-5">
                   <StepBadge n={3} active={step3Active} done={false} />
-                  <h2 className="text-sm font-semibold text-gray-800">测试配置</h2>
-                  <span className="text-xs text-gray-400 ml-auto">均为可选项</span>
+                  <h2 className="text-sm font-semibold text-gray-800">{t('tests.step3.title','Test Configuration')}</h2>
+                  <span className="text-xs text-gray-400 ml-auto">{t('tests.step3.optional','All optional')}</span>
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   <div className="space-y-4">
                     <div>
-                      <label className="text-xs font-medium text-gray-500 mb-1.5 block">包名</label>
+                      <label className="text-xs font-medium text-gray-500 mb-1.5 block">{t('tests.config.package','Package name')}</label>
                       <input
                         type="text"
                         placeholder="com.qtsig.qtest"
@@ -774,7 +778,7 @@ export default function TestsPage() {
                     </div>
 
                     <div>
-                      <label className="text-xs font-medium text-gray-500 mb-1.5 block">Ability</label>
+                      <label className="text-xs font-medium text-gray-500 mb-1.5 block">{t('tests.config.ability','Ability')}</label>
                       <input
                         type="text"
                         placeholder="EntryAbility"
@@ -787,10 +791,10 @@ export default function TestsPage() {
 
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-medium text-gray-500">模块过滤（可多选）</label>
+                        <label className="text-xs font-medium text-gray-500">{t('tests.config.moduleFilter','Module filter (multi-select)')}</label>
                         {!disableIgnoreList && (hapInfo?.ignoreList ?? []).length > 0 && (hapInfo?.totalLibs ?? 0) > effectiveTotal && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: "rgba(245,158,11,0.12)", color: "#b45309" }}>
-                            已忽略 {(hapInfo?.totalLibs ?? 0) - effectiveTotal} 个库
+                            {t('tests.config.ignoredCount', `Ignored ${(hapInfo?.totalLibs ?? 0) - effectiveTotal} libraries`)}
                           </span>
                         )}
                       </div>
@@ -803,13 +807,13 @@ export default function TestsPage() {
                             color: filterModule.length === 0 ? "#1d7a2e" : "#64748b",
                           }}
                         >
-                          <span className="flex items-center gap-2">
+                            <span className="flex items-center gap-2">
                             <input
                               type="checkbox"
                               checked={filterModule.length === 0}
                               onChange={() => setFilterModule([])}
                             />
-                            <span>全部模块</span>
+                            <span>{t('tests.config.allModules','All modules')}</span>
                           </span>
                           <span className="text-[11px]" style={{ color: "#94a3b8" }}>{effectiveTotal}</span>
                         </label>
@@ -850,7 +854,7 @@ export default function TestsPage() {
 
                   <div className="space-y-4">
                     <div>
-                      <label className="text-xs font-medium text-gray-500 mb-1.5 block">单个测试超时</label>
+                      <label className="text-xs font-medium text-gray-500 mb-1.5 block">{t('tests.config.timeout','Single test timeout')}</label>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                         {TIMEOUT_OPTIONS.map((t) => (
                           <button
@@ -871,8 +875,8 @@ export default function TestsPage() {
 
                     <div className="flex items-center justify-between p-3 rounded-xl" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.06)" }}>
                       <div>
-                        <p className="text-sm font-medium text-gray-700">跳过安装步骤</p>
-                        <p className="text-xs text-gray-400">HAP 已安装时可跳过以节省时间</p>
+                        <p className="text-sm font-medium text-gray-700">{t('tests.config.skipInstall','Skip install step')}</p>
+                        <p className="text-xs text-gray-400">{t('tests.config.skipInstallDesc','Skip if HAP is already installed to save time')}</p>
                       </div>
                       <button
                         onClick={() => setSkipInstall(!skipInstall)}
@@ -888,8 +892,8 @@ export default function TestsPage() {
 
                     <div className="flex items-center justify-between p-3 rounded-xl" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.06)" }}>
                       <div>
-                        <p className="text-sm font-medium text-gray-700">忽略列表（gitignore）</p>
-                        <p className="text-xs text-gray-400">开启后不跟随 HAP 内置忽略列表过滤测试库</p>
+                        <p className="text-sm font-medium text-gray-700">{t('tests.config.disableIgnore','Ignore list (gitignore)')}</p>
+                        <p className="text-xs text-gray-400">{t('tests.config.disableIgnoreDesc','When enabled, do not filter test libs by HAP ignore list')}</p>
                       </div>
                       <button
                         onClick={() => setDisableIgnoreList(!disableIgnoreList)}
@@ -917,7 +921,7 @@ export default function TestsPage() {
                 {starting ? (
                   <span className="flex items-center justify-center gap-2">
                     <Spinner size="sm" color="white" />
-                    正在启动测试...
+                    {t('tests.starting','Starting tests...')}
                   </span>
                 ) : (
                   <span className="flex items-center justify-center gap-2">
@@ -925,7 +929,7 @@ export default function TestsPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    开始执行测试
+                    {t('tests.start','Start tests')}
                   </span>
                 )}
               </button>
@@ -937,9 +941,9 @@ export default function TestsPage() {
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           {/* 运行中的会话 */}
           <div className="rounded-2xl p-4 shadow-sm" style={{ background: "linear-gradient(135deg,rgba(65,205,82,0.08),rgba(33,168,52,0.05))", border: "1.5px solid rgba(65,205,82,0.25)", backdropFilter: "blur(12px)" }}>
-            <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 mb-3">
               <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "#41CD52" }} />
-              <h2 className="text-sm font-semibold" style={{ color: "#1a6628" }}>进行中的测试</h2>
+              <h2 className="text-sm font-semibold" style={{ color: "#1a6628" }}>{t('tests.running.title','Running Tests')}</h2>
               <span className="text-xs px-1.5 py-0.5 rounded-full font-bold ml-auto" style={{ background: "rgba(65,205,82,0.15)", color: "#1d7a2e" }}>{runningSessions.length}</span>
             </div>
             {runningSessions.length > 0 ? (
@@ -949,9 +953,9 @@ export default function TestsPage() {
                 ))}
               </div>
             ) : (
-              <div className="rounded-xl p-6 text-center" style={{ background: "rgba(255,255,255,0.7)", border: "1px dashed rgba(65,205,82,0.2)" }}>
-                <p className="text-sm text-gray-500">暂无运行中的测试</p>
-                <p className="text-xs text-gray-400 mt-1">配置参数后点击开始执行测试</p>
+                <div className="rounded-xl p-6 text-center" style={{ background: "rgba(255,255,255,0.7)", border: "1px dashed rgba(65,205,82,0.2)" }}>
+                <p className="text-sm text-gray-500">{t('tests.running.none','No running tests')}</p>
+                <p className="text-xs text-gray-400 mt-1">{t('tests.running.hint','Configure parameters then click Start to run tests')}</p>
               </div>
             )}
           </div>
@@ -966,16 +970,16 @@ export default function TestsPage() {
                 <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span className="text-sm font-semibold text-gray-600">历史记录</span>
+                <span className="text-sm font-semibold text-gray-600">{t('tests.history.title','History')}</span>
                 <span className="text-xs px-1.5 py-0.5 rounded-full ml-1" style={{ background: "rgba(0,0,0,0.06)", color: "#94a3b8" }}>{historySessions.length}</span>
               </div>
               <div className="flex items-center gap-2">
                 {historySessions.length > 0 && (
-                  <button
+                    <button
                     onClick={handleDeleteAll}
                     disabled={deletingAll}
                     className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all hover:bg-red-50 text-gray-400 hover:text-red-500 disabled:opacity-50"
-                    title="全部删除"
+                    title={t('tests.history.deleteAll','Delete All')}
                   >
                     {deletingAll ? (
                       <Spinner size="sm" />
@@ -984,7 +988,7 @@ export default function TestsPage() {
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
-                        全部删除
+                        {t('tests.history.deleteAll','Delete All')}
                       </>
                     )}
                   </button>
@@ -1001,9 +1005,9 @@ export default function TestsPage() {
             </div>
             {historySessions.length === 0 ? (
               <div className="px-4 pb-5">
-                <div className="rounded-xl p-6 text-center" style={{ background: "rgba(0,0,0,0.02)", border: "1px dashed rgba(0,0,0,0.08)" }}>
-                  <p className="text-sm text-gray-500">暂无历史记录</p>
-                  <p className="text-xs text-gray-400 mt-1">完成测试后会显示在这里</p>
+                  <div className="rounded-xl p-6 text-center" style={{ background: "rgba(0,0,0,0.02)", border: "1px dashed rgba(0,0,0,0.08)" }}>
+                  <p className="text-sm text-gray-500">{t('tests.history.none','No history records')}</p>
+                  <p className="text-xs text-gray-400 mt-1">{t('tests.history.hint','Completed tests appear here')}</p>
                 </div>
               </div>
             ) : showHistory ? (
@@ -1012,7 +1016,7 @@ export default function TestsPage() {
                   <SessionCard key={s.id} session={s} href={`/tests/${s.id}`} onDelete={handleDelete} deletingId={deletingId} />
                 ))}
                 {historySessions.length > 10 && (
-                  <p className="text-xs text-center text-gray-400 pt-1">仅显示最近 10 条</p>
+                  <p className="text-xs text-center text-gray-400 pt-1">{t('tests.history.limitNotice','Showing latest 10 entries only')}</p>
                 )}
               </div>
             ) : null}
@@ -1037,8 +1041,8 @@ export default function TestsPage() {
               <svg className="w-4 h-4 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
               </svg>
-              <h3 className="text-sm font-semibold text-gray-800 flex-1">已下载缓存</h3>
-              <span className="text-xs text-gray-400">{gcCachedFiles.length} 个文件</span>
+              <h3 className="text-sm font-semibold text-gray-800 flex-1">{t('tests.gc.modalTitle','Downloaded Cache')}</h3>
+              <span className="text-xs text-gray-400">{gcCachedFiles.length} {t('tests.gc.files','files')}</span>
               <button
                 onClick={() => setShowCachedModal(false)}
                 className="ml-2 p-1 rounded-lg hover:bg-gray-100 transition-all"
@@ -1064,7 +1068,7 @@ export default function TestsPage() {
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       {isSelected ? (
-                        <span className="text-xs font-medium px-2 py-0.5 rounded-md" style={{ background: "rgba(16,185,129,0.12)", color: "#10b981" }}>已选中</span>
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-md" style={{ background: "rgba(16,185,129,0.12)", color: "#10b981" }}>{t('common.selected','Selected')}</span>
                       ) : (
                         <button
                           onClick={() => { handleGcDownload("", f.name); setShowCachedModal(false); }}
@@ -1072,14 +1076,14 @@ export default function TestsPage() {
                           className="text-xs font-medium px-2 py-1 rounded-lg transition-all disabled:opacity-40"
                           style={{ background: "rgba(65,205,82,0.1)", color: "#1d7a2e", border: "1px solid rgba(65,205,82,0.3)" }}
                         >
-                          选择
+                          {t('tests.action.select','Select')}
                         </button>
                       )}
                       <button
                         onClick={() => handleGcDeleteFile(f.name)}
                         disabled={isDeleting || !!gcDownloadProgress}
                         className="p-1 rounded-lg transition-all disabled:opacity-40 hover:bg-red-50"
-                        title="删除"
+                        title={t('common.delete','Delete')}
                       >
                         {isDeleting ? <Spinner size="sm" /> : (
                           <svg className="w-3.5 h-3.5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">

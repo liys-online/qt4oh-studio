@@ -7,6 +7,7 @@ import { useDevices } from "./devices-context";
 import { NewTestButton } from "@/components/NewTestButton";
 import { LoadingState } from "@/components/LoadingState";
 import { SessionCard } from "@/components/SessionCard";
+import { useTranslation } from "@/app/i18n";
 
 interface Overview {
   totalSessions: number;
@@ -68,6 +69,7 @@ function StatCard({
 
 
 export default function DashboardPage() {
+  const { t } = useTranslation();
   const { devices, hdcVersion } = useDevices();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -77,11 +79,11 @@ export default function DashboardPage() {
 
   const handleDeleteAll = async (e: React.MouseEvent) => {
     e.preventDefault();
-    if (!confirm(`确认删除全部 ${sessions.filter(s => s.status !== "running").length} 条历史记录？此操作不可撤销。`)) return;
+    if (!confirm(t('confirm.deleteAllHistory', `Confirm delete all ${sessions.filter(s => s.status !== "running").length} history entries? This action cannot be undone.`))) return;
     setDeletingAll(true);
     try {
       const res = await fetch("/api/tests", { method: "DELETE" });
-      if (!res.ok) { const d = await res.json(); alert(d.error || "删除失败"); return; }
+      if (!res.ok) { const d = await res.json(); alert(d.error || t('error.deleteFailed','Delete failed')); return; }
       await fetchData();
     } finally {
       setDeletingAll(false);
@@ -104,13 +106,13 @@ export default function DashboardPage() {
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!confirm("确认删除这条历史记录？")) return;
+    if (!confirm(t('confirm.deleteRecord','Confirm delete this record?'))) return;
     setDeletingId(id);
     try {
       const res = await fetch(`/api/tests/${id}?action=delete`, { method: "DELETE" });
-      if (!res.ok) {
+        if (!res.ok) {
         const d = await res.json();
-        alert(d.error || "删除失败");
+        alert(d.error || t('error.deleteFailed','Delete failed'));
         return;
       }
       await fetchData();
@@ -147,9 +149,9 @@ export default function DashboardPage() {
                 ✨ Qt for OpenHarmony
               </span>
             </div>
-            <h1 className="text-xl sm:text-2xl font-bold text-white">单元测试平台</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-white">{t('dashboard.title','Unit Test Platform')}</h1>
             <p className="text-sm mt-1" style={{ color: "rgba(200,235,205,0.9)" }}>
-              管理 HarmonyOS 设备、执行 Qt 测试并分析结果
+              {t('dashboard.subtitle','Manage HarmonyOS devices, run Qt tests and analyze results')}
             </p>
             {/* 设备状态内嵌 */}
             <div className="mt-4 flex items-center gap-3 flex-wrap">
@@ -164,7 +166,7 @@ export default function DashboardPage() {
               {devices.length === 0 ? (
                 <div className="flex items-center gap-2 text-xs" style={{ color: "rgba(254,202,202,0.9)" }}>
                   <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                  未检测到设备
+                  {t('dashboard.noDevices','No devices detected')}
                 </div>
               ) : (
                 devices.map((d) => (
@@ -183,9 +185,9 @@ export default function DashboardPage() {
       {/* 统计卡片 */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
-          label="总测试数"
+          label={t('dashboard.stat.totalTests','Total tests')}
           value={overview?.totalTests ?? 0}
-          sub={`${overview?.completedSessions ?? 0} 个会话`}
+          sub={t('dashboard.stat.sessions', `${overview?.completedSessions ?? 0} sessions`)}
           gradient="linear-gradient(135deg, #41CD52, #21a834)"
           icon={
             <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -194,9 +196,9 @@ export default function DashboardPage() {
           }
         />
         <StatCard
-          label="通过"
+          label={t('dashboard.stat.passed','Passed')}
           value={overview?.totalSuccess ?? 0}
-          sub={`通过率 ${passRate}%`}
+          sub={t('dashboard.stat.passRate', `Pass rate ${passRate}%`)}
           gradient="linear-gradient(135deg, #10b981, #059669)"
           icon={
             <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -205,7 +207,7 @@ export default function DashboardPage() {
           }
         />
         <StatCard
-          label="超时"
+          label={t('dashboard.stat.timeout','Timeouts')}
           value={overview?.totalTimeout ?? 0}
           gradient="linear-gradient(135deg, #f59e0b, #d97706)"
           icon={
@@ -215,7 +217,7 @@ export default function DashboardPage() {
           }
         />
         <StatCard
-          label="崩溃"
+          label={t('dashboard.stat.crash','Crashes')}
           value={overview?.totalCrash ?? 0}
           gradient="linear-gradient(135deg, #ef4444, #dc2626)"
           icon={
@@ -225,7 +227,7 @@ export default function DashboardPage() {
           }
         />
         <StatCard
-          label="失败"
+          label={t('dashboard.stat.failed','Failed')}
           value={overview?.totalFailed ?? 0}
           gradient="linear-gradient(135deg, #94a3b8, #64748b)"
           icon={
@@ -241,7 +243,7 @@ export default function DashboardPage() {
         {/* 通过率卡片 */}
         <div className="lg:col-span-2 rounded-2xl p-5 shadow-sm" style={{ background: "rgba(255,255,255,0.8)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.9)" }}>
           <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-semibold text-gray-700">整体通过率</p>
+            <p className="text-sm font-semibold text-gray-700">{t('dashboard.overallPassRate','Overall pass rate')}</p>
             <span className="text-2xl font-bold" style={{ background: "linear-gradient(135deg, #41CD52, #21a834)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
               {passRate}%
             </span>
@@ -252,14 +254,14 @@ export default function DashboardPage() {
           </div>
           <div className="flex gap-5 mt-4">
             {[
-              { label: "成功", value: overview?.totalSuccess ?? 0, color: "#10b981" },
-              { label: "超时", value: overview?.totalTimeout ?? 0, color: "#f59e0b" },
-              { label: "崩溃", value: overview?.totalCrash ?? 0, color: "#ef4444" },
-              { label: "失败", value: overview?.totalFailed ?? 0, color: "#94a3b8" },
+              { key: 'status.test.success', label: 'Passed', value: overview?.totalSuccess ?? 0, color: "#10b981" },
+              { key: 'status.test.timeout', label: 'Timeout', value: overview?.totalTimeout ?? 0, color: "#f59e0b" },
+              { key: 'status.test.crash', label: 'Crash', value: overview?.totalCrash ?? 0, color: "#ef4444" },
+              { key: 'status.test.failed', label: 'Failed', value: overview?.totalFailed ?? 0, color: "#94a3b8" },
             ].map((item) => (
-              <div key={item.label} className="flex items-center gap-1.5">
+              <div key={item.key} className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full" style={{ background: item.color }} />
-                <span className="text-xs text-gray-500">{item.label}</span>
+                <span className="text-xs text-gray-500">{t(item.key, item.label)}</span>
                 <span className="text-xs font-semibold text-gray-700">{item.value}</span>
               </div>
             ))}
@@ -268,12 +270,12 @@ export default function DashboardPage() {
 
         {/* 快捷操作 */}
         <div className="rounded-2xl p-5 shadow-sm" style={{ background: "rgba(255,255,255,0.8)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.9)" }}>
-          <p className="text-sm font-semibold text-gray-700 mb-3">快捷操作</p>
+          <p className="text-sm font-semibold text-gray-700 mb-3">{t('dashboard.quickActions','Quick actions')}</p>
           <div className="space-y-2">
             {[
-              { href: "/tests", label: "执行新测试", icon: "▶", gradient: "linear-gradient(135deg, #41CD52, #21a834)" },
-              { href: "/devices", label: "查看设备", icon: "📱", gradient: "linear-gradient(135deg, #0ea5e9, #0284c7)" },
-              { href: "/reports", label: "分析报告", icon: "📊", gradient: "linear-gradient(135deg, #10b981, #059669)" },
+              { href: "/tests", labelKey: 'dashboard.quickAction.runTests', label: 'Run tests', icon: "▶", gradient: "linear-gradient(135deg, #41CD52, #21a834)" },
+              { href: "/devices", labelKey: 'dashboard.quickAction.viewDevices', label: 'View devices', icon: "📱", gradient: "linear-gradient(135deg, #0ea5e9, #0284c7)" },
+              { href: "/reports", labelKey: 'dashboard.quickAction.viewReports', label: 'View reports', icon: "📊", gradient: "linear-gradient(135deg, #10b981, #059669)" },
             ].map((item) => (
               <Link
                 key={item.href}
@@ -284,7 +286,7 @@ export default function DashboardPage() {
                 <span className="w-8 h-8 rounded-lg flex items-center justify-center text-sm" style={{ background: item.gradient }}>
                   {item.icon}
                 </span>
-                <span className="text-sm font-medium text-gray-700">{item.label}</span>
+                <span className="text-sm font-medium text-gray-700">{t(item.labelKey || item.label, item.label)}</span>
                 <svg className="w-4 h-4 text-gray-400 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
@@ -297,14 +299,14 @@ export default function DashboardPage() {
       {/* 最近测试会话 */}
       <div className="rounded-2xl shadow-sm overflow-hidden" style={{ background: "rgba(255,255,255,0.8)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.9)" }}>
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
-          <h2 className="text-sm font-semibold text-gray-700">最近测试会话</h2>
+          <h2 className="text-sm font-semibold text-gray-700">{t('dashboard.recentSessions','Recent test sessions')}</h2>
           <div className="flex items-center gap-2">
             {sessions.some(s => s.status !== "running") && (
               <button
                 onClick={handleDeleteAll}
                 disabled={deletingAll}
                 className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all hover:bg-red-50 text-gray-400 hover:text-red-500 disabled:opacity-50"
-                title="全部删除"
+                title={t('dashboard.deleteAll','Delete all')}
               >
                 {deletingAll ? (
                   <Spinner size="sm" />
@@ -313,13 +315,13 @@ export default function DashboardPage() {
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
-                    全部删除
+                    {t('dashboard.deleteAll','Delete all')}
                   </>
                 )}
               </button>
             )}
             <Button size="sm" variant="light" as={Link} href="/reports" className="text-indigo-500">
-              查看全部 →
+              {t('dashboard.viewAll','View all →')}
             </Button>
           </div>
         </div>
@@ -330,8 +332,8 @@ export default function DashboardPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
               </svg>
             </div>
-            <p className="text-sm text-gray-400">暂无测试记录</p>
-            <Button size="sm" color="primary" variant="flat" as={Link} href="/tests">开始测试</Button>
+            <p className="text-sm text-gray-400">{t('dashboard.noSessions','No test sessions yet')}</p>
+            <Button size="sm" color="primary" variant="flat" as={Link} href="/tests">{t('dashboard.startTests','Start tests')}</Button>
           </div>
         ) : (
           <div className="space-y-2 px-5 py-3">

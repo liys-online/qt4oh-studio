@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslation } from "../app/i18n";
 
 /** 新建测试跳转按钮，绿色渐变风格，统一用于各页面 Header */
 export function NewTestButton() {
+  const { t } = useTranslation();
   return (
     <Link
       href="/tests"
@@ -13,7 +15,7 @@ export function NewTestButton() {
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
       </svg>
-      新建测试
+      {t("button.newTest", "New Test")}
     </Link>
   );
 }

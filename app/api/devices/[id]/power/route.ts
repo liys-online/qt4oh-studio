@@ -16,11 +16,11 @@ export async function POST(
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "请求体解析失败" }, { status: 400 });
+    return NextResponse.json({ error: "Failed to parse request body" }, { status: 400 });
   }
 
   if (!body.action) {
-    return NextResponse.json({ error: "action 不能为空" }, { status: 400 });
+    return NextResponse.json({ error: "action is required" }, { status: 400 });
   }
 
   try {
