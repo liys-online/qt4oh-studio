@@ -162,25 +162,6 @@ export function stripSessionContent(session: TestSession): TestSession {
 
 // ─── 公开 API ────────────────────────────────────────────────────────────────
 
-export async function loadSessions(userId?: number, role?: string): Promise<TestSession[]> {
-  await ensureMigrated();
-  const db = getDb();
-  let query = db<DbSession>("sessions").select("*").orderBy("start_time", "desc");
-  // 非管理员只能看自己的会话
-  if (userId !== undefined && role !== "admin") {
-    query = query.where("user_id", userId);
-  }
-  const rows = await query;
-  const sessions: TestSession[] = [];
-  for (const row of rows) {
-    const results = await db<DbResult>("test_results")
-      .where("session_id", row.id)
-      .orderBy("sort_order", "asc");
-    sessions.push(rowToSession(row, results.map(rowToResult)));
-  }
-  return sessions;
-}
-
 /**
  * 轻量化批量加载，用于列表 API：
  * - 单次批量查询替代 N+1

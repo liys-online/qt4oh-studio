@@ -1,10 +1,3 @@
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
-
 /** MM/DD HH:mm 格式，适用于列表展示 */
 export function formatTime(iso: string): string {
   return new Date(iso).toLocaleString("zh-CN", {
